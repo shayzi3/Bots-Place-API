@@ -159,5 +159,10 @@ async def login_user() -> None:
 
 
 @auth_router.post(AuthPathEnum.API_LOGOUT, summary=AuthApiDescriptionEnum.LOGOUT)
-async def logout_user() -> None:
-    pass
+async def logout_user(
+    cookies: FromDishka[CookieSettings],
+) -> RedirectResponse:
+    response = RedirectResponse(AuthPathEnum.PAGE_LOGIN, status_code=303)
+    clear_auth_cookie(response, ACCESS_COOKIE, cookies)
+    clear_auth_cookie(response, PENDING_COOKIE, cookies)
+    return response
