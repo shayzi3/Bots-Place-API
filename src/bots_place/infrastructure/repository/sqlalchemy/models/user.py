@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Boolean, DateTime, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -15,6 +15,9 @@ class User(Base):
     auth_from: Mapped[str] = mapped_column(
         String(20)
     )  # src.bots_place.domain.entities.user.UserAuthEnum
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

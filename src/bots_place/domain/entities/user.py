@@ -13,5 +13,6 @@ class UserBaseModel(BaseModel):
     id: int
     email: str
     username: str
-    created_at: datetime
     auth_from: UserAuthEnum
+    is_verified: bool
+    created_at: datetime

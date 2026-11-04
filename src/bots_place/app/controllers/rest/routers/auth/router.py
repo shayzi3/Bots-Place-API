@@ -1,38 +1,163 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import HTMLResponse
+from dishka.integrations.fastapi import DishkaRoute, FromDishka
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from bots_place.app.core.api_path import ApiPathEnum
-
-from .form.auth_form import EmailAuthForm
-from .schema.token import TokenSchema
-
-auth_router = APIRouter(prefix=ApiPathEnum.PREFIX, tags=["Auth"])
-
-
-@auth_router.get(ApiPathEnum.PAGE, response_class=HTMLResponse, summary="Login page")
-async def login_page():
-    return "<h1>Login Page</h1>"
-
-
-@auth_router.post(ApiPathEnum.REGISTER, summary="Register user")
-async def register_user():
-    pass
-
-
-@auth_router.post(
-    ApiPathEnum.LOGIN,
-    summary="Login user",
-    response_model=TokenSchema,
-    responses={200: {"description": "Successful login", "model": TokenSchema}},
+from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
+    ACCESS_COOKIE,
+    PENDING_COOKIE,
+    clear_auth_cookie,
+    set_auth_cookie,
 )
-async def login_user(
-    email_form: Annotated[EmailAuthForm, Depends()],
-) -> TokenSchema:
+from bots_place.app.controllers.rest.templates import templates
+from bots_place.app.core.api_path import AuthPathEnum
+from bots_place.app.security.tokens import (
+    ConfirmationPurpose,
+    TokenService,
+)
+from bots_place.config.env import CookieSettings
+from bots_place.domain.commands import (
+    ConfirmRegistrationCommand,
+    RegisterUserCommand,
+)
+from bots_place.domain.exceptions.user import (
+    EmailAlreadyExistsError,
+    InvalidEmailCodeError,
+)
+from bots_place.infrastructure.mediator import Mediator
+
+from .depends import Confirmation
+from .doc import AuthApiDescriptionEnum, AuthPageDescriptionEnum
+from .schema.confirm import ConfirmCodeForm
+
+auth_router = APIRouter(tags=["Auth"], route_class=DishkaRoute)
+
+
+@auth_router.get(
+    AuthPathEnum.PAGE_LOGIN,
+    response_class=HTMLResponse,
+    summary=AuthPageDescriptionEnum.LOGIN,
+)
+async def login_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "login_url": AuthPathEnum.API_LOGIN,
+            "google_url": "#",
+            "register_url": AuthPathEnum.PAGE_REGISTER,
+        },
+    )
+
+
+@auth_router.get(
+    AuthPathEnum.PAGE_REGISTER,
+    response_class=HTMLResponse,
+    summary=AuthPageDescriptionEnum.REGISTER,
+)
+async def register_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "register.html",
+        {
+            "register_url": AuthPathEnum.API_REGISTER,
+            "google_url": "#",
+            "login_url": AuthPathEnum.PAGE_LOGIN,
+        },
+    )
+
+
+@auth_router.post(AuthPathEnum.API_REGISTER, summary=AuthApiDescriptionEnum.REGISTER)
+async def register_user(
+    command: Annotated[RegisterUserCommand, Form()],
+    mediator: FromDishka[Mediator],
+    tokens: FromDishka[TokenService],
+    cookies: FromDishka[CookieSettings],
+) -> RedirectResponse:
+    try:
+        await mediator.send(command)
+    except EmailAlreadyExistsError:
+        return RedirectResponse(AuthPathEnum.PAGE_LOGIN, status_code=303)
+
+    confirmation = tokens.create_confirmation(
+        command.email, ConfirmationPurpose.REGISTER
+    )
+    response = RedirectResponse(AuthPathEnum.PAGE_CONFIRM, status_code=303)
+    set_auth_cookie(
+        response,
+        PENDING_COOKIE,
+        confirmation,
+        tokens.confirmation_ttl_seconds,
+        cookies,
+    )
+    return response
+
+
+@auth_router.get(
+    AuthPathEnum.PAGE_CONFIRM,
+    response_class=HTMLResponse,
+    summary=AuthPageDescriptionEnum.CONFIRM,
+)
+async def confirm_page(
+    request: Request,
+    confirmation: Confirmation,
+) -> HTMLResponse:
+    if confirmation is not None:
+        return templates.TemplateResponse(
+            request,
+            "confirm.html",
+            {
+                "confirm_url": AuthPathEnum.API_CONFIRM,
+                "login_url": AuthPathEnum.PAGE_LOGIN,
+                "google_url": "#",
+                "allowed": confirmation is not None,
+                "error": request.query_params.get("error"),
+            },
+        )
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "login_url": AuthPathEnum.API_LOGIN,
+            "google_url": "#",
+            "register_url": AuthPathEnum.PAGE_REGISTER,
+        },
+    )
+
+
+@auth_router.post(AuthPathEnum.API_CONFIRM, summary=AuthApiDescriptionEnum.CONFIRM)
+async def confirm(
+    confirmation: Confirmation,
+    form: Annotated[ConfirmCodeForm, Form()],
+    mediator: FromDishka[Mediator],
+    tokens: FromDishka[TokenService],
+    cookies: FromDishka[CookieSettings],
+) -> RedirectResponse:
+    if confirmation is None or confirmation.purpose is not ConfirmationPurpose.REGISTER:
+        return RedirectResponse(AuthPathEnum.PAGE_LOGIN, status_code=303)
+
+    try:
+        user = await mediator.send(
+            ConfirmRegistrationCommand(email=confirmation.email, code=form.code)
+        )
+    except InvalidEmailCodeError:
+        return RedirectResponse(
+            f"{AuthPathEnum.PAGE_CONFIRM}?error=code", status_code=303
+        )
+
+    access = tokens.create_access(user.id, user.email)
+    response = RedirectResponse("/", status_code=303)
+    clear_auth_cookie(response, PENDING_COOKIE, cookies)
+    set_auth_cookie(response, ACCESS_COOKIE, access, tokens.access_ttl_seconds, cookies)
+    return response
+
+
+@auth_router.post(AuthPathEnum.API_LOGIN, summary=AuthApiDescriptionEnum.LOGIN)
+async def login_user() -> None:
     raise NotImplementedError
 
 
-@auth_router.post(ApiPathEnum.LOGOUT, summary="Logout user")
-async def logout_user():
+@auth_router.post(AuthPathEnum.API_LOGOUT, summary=AuthApiDescriptionEnum.LOGOUT)
+async def logout_user() -> None:
     pass

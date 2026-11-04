@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Вход{% endblock %}
+
+{% block content %}
+<h1>Добро пожаловать</h1>
+<p class="subtitle">Войдите в Bots Place</p>
+
+<form method="post" action="{{ login_url }}">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+    <button type="submit" class="btn primary">Продолжить</button>
+</form>
+{% endblock %}
+
+{% block google_label %}Войти через Google{% endblock %}
+
+{% block switch %}
+<a class="btn switch" href="{{ register_url }}">Зарегистрироваться</a>
+{% endblock %}

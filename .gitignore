@@ -45,3 +45,5 @@ htmlcov/
 
 
 *_test.py
+migrations/
+alembic.ini
