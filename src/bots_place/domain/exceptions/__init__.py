@@ -4,6 +4,7 @@ from .user import (
     EmailAlreadyExistsError,
     InvalidEmailCodeError,
     InvalidTokenError,
+    LoginNotAllowedError,
 )
 
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     "HandlerNotFoundError",
     "InvalidEmailCodeError",
     "InvalidTokenError",
+    "LoginNotAllowedError",
     "UnknownFieldError",
     "UnknownOperatorError",
 ]

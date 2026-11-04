@@ -5,7 +5,7 @@ from bots_place.domain.entities.update import UpdateBaseModel
 from .base import BaseRepository
 
 
-class BaseUpdateRepository(BaseRepository):
+class BaseUpdateRepository(BaseRepository[UpdateBaseModel]):
     @abstractmethod
     async def get_unprocessed(self, limit: int = 100) -> list[UpdateBaseModel]: ...
 

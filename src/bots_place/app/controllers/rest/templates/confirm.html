@@ -3,8 +3,7 @@
 {% block title %}Подтверждение{% endblock %}
 
 {% block content %}
-{% if allowed %}
-<h1>Подтвердите регистрацию</h1>
+<h1>Подтвердите почту {{ email }}</h1>
 <p class="subtitle">Введите код из письма</p>
 
 {% if error == "code" %}
@@ -17,11 +16,6 @@
            placeholder="000000" required>
     <button type="submit" class="btn primary">Подтвердить</button>
 </form>
-{% else %}
-<h1>Страница недоступна</h1>
-<p class="subtitle">Ссылка подтверждения недействительна или устарела. Войдите заново.</p>
-<a class="btn primary" href="{{ login_url }}">Войти заново</a>
-{% endif %}
 {% endblock %}
 
 {% block alternative %}{% endblock %}

@@ -10,11 +10,11 @@ from bots_place.infrastructure.repository.expressions import (
 )
 
 
-class BaseRepository(ABC):
+class BaseRepository[EntityType: BaseModel](ABC):
     """Technology-agnostic repository contract."""
 
     @abstractmethod
-    async def get(self, *where: ModelFieldExpression) -> Any: ...
+    async def get(self, *where: ModelFieldExpression) -> EntityType | None: ...
 
     @abstractmethod
     async def get_all(
@@ -23,14 +23,14 @@ class BaseRepository(ABC):
         order_by: ModelOrderExpression | None = None,
         offset: int | None = None,
         limit: int | None = None,
-    ) -> list[Any]: ...
+    ) -> list[EntityType]: ...
 
     @abstractmethod
     async def create(
         self,
         obj_in: BaseModel | Mapping[str, Any],
         auto_commit: bool = True,
-    ) -> Any: ...
+    ) -> EntityType: ...
 
     @abstractmethod
     async def update(
@@ -38,7 +38,7 @@ class BaseRepository(ABC):
         *where: ModelFieldExpression,
         obj_in: BaseModel | Mapping[str, Any],
         auto_commit: bool = True,
-    ) -> Any | None: ...
+    ) -> EntityType | None: ...
 
     @abstractmethod
     async def update_by_id(
@@ -46,7 +46,7 @@ class BaseRepository(ABC):
         model_id: int,
         obj_in: BaseModel | Mapping[str, Any],
         auto_commit: bool = True,
-    ) -> Any | None: ...
+    ) -> EntityType | None: ...
 
     @abstractmethod
     async def delete(

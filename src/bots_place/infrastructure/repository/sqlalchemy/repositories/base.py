@@ -26,7 +26,9 @@ from bots_place.infrastructure.repository.sqlalchemy.models.base import Base
 logger = logging.getLogger(__name__)
 
 
-class SqlAlchemyBaseRepository[ModelType: Base, EntityType: BaseModel](BaseRepository):
+class SqlAlchemyBaseRepository[ModelType: Base, EntityType: BaseModel](
+    BaseRepository[EntityType]
+):
     model: type[ModelType]
     entity: type[EntityType]
 

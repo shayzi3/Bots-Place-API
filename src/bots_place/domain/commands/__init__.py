@@ -1,3 +1,9 @@
-from .user import ConfirmRegistrationCommand, RegisterUserCommand
+from .login import ConfirmLoginCommand, RequestLoginCodeCommand
+from .register import ConfirmRegistrationCommand, RegisterUserCommand
 
-__all__ = ["ConfirmRegistrationCommand", "RegisterUserCommand"]
+__all__ = [
+    "ConfirmLoginCommand",
+    "ConfirmRegistrationCommand",
+    "RegisterUserCommand",
+    "RequestLoginCodeCommand",
+]

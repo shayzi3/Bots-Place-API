@@ -5,7 +5,7 @@ from bots_place.domain.entities.bot import BotModel
 from .base import BaseRepository
 
 
-class BaseBotRepository(BaseRepository):
+class BaseBotRepository(BaseRepository[BotModel]):
     @abstractmethod
     async def get_by_token(self, token: str) -> BotModel | None: ...
 

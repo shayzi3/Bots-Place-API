@@ -6,6 +6,14 @@ class EmailAlreadyExistsError(Exception):
         self.email = email
 
 
+class LoginNotAllowedError(Exception):
+    """Raised when login is requested for an unknown or unverified user."""
+
+    def __init__(self, email: str) -> None:
+        super().__init__(f"Login is not allowed for {email!r}")
+        self.email = email
+
+
 class InvalidEmailCodeError(Exception):
     """Raised when the email confirmation code is missing, wrong or expired."""
 

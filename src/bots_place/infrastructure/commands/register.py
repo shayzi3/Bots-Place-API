@@ -1,7 +1,7 @@
 import asyncio
-import secrets
 from datetime import UTC, datetime, timedelta
 
+from bots_place.app.security.codes import generate_code
 from bots_place.app.tasks.email import EmailSender
 from bots_place.config.env import JwtSettings
 from bots_place.domain.commands import (
@@ -16,10 +16,6 @@ from bots_place.domain.exceptions.user import (
 )
 from bots_place.infrastructure.repository import Model
 from bots_place.infrastructure.repository.base import BaseUnitOfWork
-
-
-def generate_code() -> str:
-    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 class RegisterUserHandler:

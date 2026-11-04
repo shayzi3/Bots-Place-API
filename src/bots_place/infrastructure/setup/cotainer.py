@@ -8,12 +8,16 @@ from bots_place.app.tasks.email import EmailSender, SmtpEmailSender
 from bots_place.config.env import CookieSettings, JwtSettings, SmtpSettings
 from bots_place.config.env import settings as app_settings
 from bots_place.domain.commands import (
+    ConfirmLoginCommand,
     ConfirmRegistrationCommand,
     RegisterUserCommand,
+    RequestLoginCodeCommand,
 )
 from bots_place.infrastructure.commands import (
+    ConfirmLoginHandler,
     ConfirmRegistrationHandler,
     RegisterUserHandler,
+    RequestLoginCodeHandler,
 )
 from bots_place.infrastructure.mediator import Mediator
 from bots_place.infrastructure.repository.base import BaseUnitOfWork
@@ -101,6 +105,22 @@ class CommandHandlerProvider(Provider):
     ) -> ConfirmRegistrationHandler:
         return ConfirmRegistrationHandler(uow)
 
+    @provide(scope=Scope.REQUEST)
+    def provide_request_login_code_handler(
+        self,
+        uow: BaseUnitOfWork,
+        email_sender: EmailSender,
+        jwt_settings: JwtSettings,
+    ) -> RequestLoginCodeHandler:
+        return RequestLoginCodeHandler(uow, email_sender, jwt_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_confirm_login_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> ConfirmLoginHandler:
+        return ConfirmLoginHandler(uow)
+
 
 class MediatorProvider(Provider):
     @provide(scope=Scope.REQUEST)
@@ -108,10 +128,14 @@ class MediatorProvider(Provider):
         self,
         register_user: RegisterUserHandler,
         confirm_registration: ConfirmRegistrationHandler,
+        request_login_code: RequestLoginCodeHandler,
+        confirm_login: ConfirmLoginHandler,
     ) -> Mediator:
         mediator = Mediator()
         mediator.register(RegisterUserCommand, register_user)
         mediator.register(ConfirmRegistrationCommand, confirm_registration)
+        mediator.register(RequestLoginCodeCommand, request_login_code)
+        mediator.register(ConfirmLoginCommand, confirm_login)
         return mediator
 
 
