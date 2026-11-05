@@ -148,6 +148,10 @@
 </head>
 <body>
     <main class="card">
+        <noscript>
+            <style>form[data-api] { display: none; }</style>
+            <p class="subtitle" style="color: #dc2626;">Для работы формы включите JavaScript в браузере и обновите страницу.</p>
+        </noscript>
         {% block content %}{% endblock %}
 
         {% block alternative %}
@@ -166,5 +170,6 @@
 
         {% block switch %}{% endblock %}
     </main>
+<script src="/static/auth.js" defer></script>
 </body>
 </html>

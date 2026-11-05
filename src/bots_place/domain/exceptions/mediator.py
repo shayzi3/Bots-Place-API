@@ -1,4 +1,7 @@
-class HandlerNotFoundError(Exception):
+from .base import AppError
+
+
+class HandlerNotFoundError(AppError):
     """Raised when the mediator has no handler registered for a command."""
 
     def __init__(self, command_type: type[object]) -> None:

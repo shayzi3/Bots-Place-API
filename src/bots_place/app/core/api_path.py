@@ -12,4 +12,5 @@ class AuthPathEnum(StrEnum):
     API_LOGIN = f"{VERSION_PREFIX}{PREFIX}/login"
     API_REGISTER = f"{VERSION_PREFIX}{PREFIX}/register"
     API_CONFIRM = f"{VERSION_PREFIX}{PREFIX}/confirm"
+    API_RESEND = f"{VERSION_PREFIX}{PREFIX}/resend"
     API_LOGOUT = f"{VERSION_PREFIX}{PREFIX}/logout"

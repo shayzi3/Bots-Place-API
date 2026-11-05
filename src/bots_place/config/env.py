@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
@@ -5,9 +6,16 @@ from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _get_env_file() -> Path:
+    override = os.getenv("BOTS_PLACE_ENV_FILE")
+    if override:
+        return Path(override)
+    return Path(__file__).parent / ".env"
+
+
 def _get_settings_config_dict(env_prefix: str) -> SettingsConfigDict:
     return SettingsConfigDict(
-        env_file=Path(__file__).parent / ".env",
+        env_file=_get_env_file(),
         env_prefix=env_prefix,
         case_sensitive=False,
         extra="ignore",
@@ -17,11 +25,11 @@ def _get_settings_config_dict(env_prefix: str) -> SettingsConfigDict:
 class DatabaseSettings(BaseSettings):
     model_config = _get_settings_config_dict("DB_")
 
-    host: str
-    port: int
-    user: str
-    password: str
-    name: str
+    host: str = "localhost"
+    port: int = 5432
+    user: str = "postgres"
+    password: str = "postgres"
+    name: str = "bots_place"
 
     @property
     def url(self) -> str:
@@ -34,23 +42,32 @@ class DatabaseSettings(BaseSettings):
 class JwtSettings(BaseSettings):
     model_config = _get_settings_config_dict("JWT_")
 
-    secret: str
-    algorithm: str
-    access_ttl_minutes: int
-    pending_ttl_minutes: int
+    secret: str = "change-me-in-production"
+    algorithm: str = "HS256"
+    access_ttl_minutes: int = 60 * 24
+    pending_ttl_minutes: int = 15
 
 
 class SmtpSettings(BaseSettings):
     model_config = _get_settings_config_dict("SMTP_")
 
-    host: str
-    port: int
-    user: str
-    password: str
-    from_email: str
-    use_tls: bool
+    host: str = ""
+    port: int = 587
+    user: str = ""
+    password: str = ""
+    from_email: str = ""
+    # STARTTLS (обычно порт 587)
+    use_tls: bool = True
+    # implicit SSL (обычно порт 465)
     use_ssl: bool = False
-    timeout: int
+    timeout: int = 30
+
+
+class CodeSettings(BaseSettings):
+    model_config = _get_settings_config_dict("CODE_")
+
+    resend_cooldown_seconds: int = 60
+    max_attempts: int = 5
 
 
 class CookieSettings(BaseSettings):
@@ -64,10 +81,11 @@ class CookieSettings(BaseSettings):
 class Settings(BaseSettings):
     model_config = _get_settings_config_dict("")
 
-    database: DatabaseSettings = DatabaseSettings()  # type: ignore[call-arg]
-    jwt: JwtSettings = JwtSettings()  # type: ignore[call-arg]
-    smtp: SmtpSettings = SmtpSettings()  # type: ignore[call-arg]
+    database: DatabaseSettings = DatabaseSettings()
+    jwt: JwtSettings = JwtSettings()
+    smtp: SmtpSettings = SmtpSettings()
     cookie: CookieSettings = CookieSettings()
+    code: CodeSettings = CodeSettings()
 
 
 settings = Settings()

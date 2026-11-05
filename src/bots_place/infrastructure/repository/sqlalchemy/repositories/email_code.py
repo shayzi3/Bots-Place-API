@@ -24,6 +24,7 @@ class EmailCodeRepository(
             Model.email == email,
             Model.purpose == purpose,
             Model.used_at.is_(None),
+            Model.revoked.is_(False),
             Model.expires_at > datetime.now(UTC),
             order_by=Model.created_at.desc(),
             limit=1,

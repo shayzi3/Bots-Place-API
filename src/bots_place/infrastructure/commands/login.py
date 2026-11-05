@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from bots_place.app.security.codes import generate_code
 from bots_place.app.tasks.email import EmailSender
-from bots_place.config.env import JwtSettings
+from bots_place.config.env import CodeSettings, JwtSettings
 from bots_place.domain.commands import ConfirmLoginCommand, RequestLoginCodeCommand
 from bots_place.domain.entities.email_code import EmailCodePurposeEnum
 from bots_place.domain.entities.user import UserBaseModel
@@ -49,14 +49,22 @@ class RequestLoginCodeHandler:
 
 
 class ConfirmLoginHandler:
-    def __init__(self, uow: BaseUnitOfWork) -> None:
+    def __init__(self, uow: BaseUnitOfWork, code_settings: CodeSettings) -> None:
         self._uow = uow
+        self._code_settings = code_settings
 
     async def handle(self, command: ConfirmLoginCommand) -> UserBaseModel:
         code = await self._uow.email_codes.get_active(
             command.email, EmailCodePurposeEnum.LOGIN.value
         )
-        if code is None or code.code != command.code:
+        if code is None or code.attempts >= self._code_settings.max_attempts:
+            raise InvalidEmailCodeError
+        if code.code != command.code:
+            await self._uow.email_codes.update(
+                Model.id == code.id,
+                obj_in={"attempts": code.attempts + 1},
+                auto_commit=True,
+            )
             raise InvalidEmailCodeError
 
         await self._uow.email_codes.update(

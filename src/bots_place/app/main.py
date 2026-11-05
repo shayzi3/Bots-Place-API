@@ -1,12 +1,13 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from dishka import AsyncContainer
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
-from bots_place.app.controllers.rest.exceptions import register_exception_handlers
 from bots_place.app.controllers.rest.routers import include_routers
 from bots_place.infrastructure.setup.cotainer import create_container, init_database
 
@@ -27,7 +28,11 @@ app = FastAPI(title="Bots Place", lifespan=lifespan)
 
 include_routers(app)
 
-register_exception_handlers(app)
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent / "controllers" / "rest" / "static"),
+    name="static",
+)
 
 setup_dishka(container, app)
 

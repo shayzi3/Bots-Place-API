@@ -16,4 +16,6 @@ class EmailCodeBaseModel(BaseModel):
     purpose: EmailCodePurposeEnum
     expires_at: datetime
     used_at: datetime | None
+    revoked: bool
+    attempts: int
     created_at: datetime

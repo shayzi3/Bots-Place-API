@@ -10,9 +10,10 @@
 <p class="subtitle" style="color: #dc2626;">Пользователь не найден или email не подтверждён.</p>
 {% endif %}
 
-<form method="post" action="{{ login_url }}">
+<form method="post" action="{{ login_url }}" data-api data-success-url="/auth/confirm">
     <label for="email">Email</label>
     <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+    <p class="subtitle" style="color: #dc2626;" data-message hidden></p>
     <button type="submit" class="btn primary">Продолжить</button>
 </form>
 {% endblock %}

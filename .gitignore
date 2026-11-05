@@ -22,6 +22,7 @@ env/
 
 # Environments / secrets
 *.env
+!tests/test.env
 
 # Testing / coverage
 .pytest_cache/

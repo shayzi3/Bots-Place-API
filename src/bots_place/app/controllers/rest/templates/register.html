@@ -6,13 +6,14 @@
 <h1>Создать аккаунт</h1>
 <p class="subtitle">Зарегистрируйтесь в Bots Place</p>
 
-<form method="post" action="{{ register_url }}">
+<form method="post" action="{{ register_url }}" data-api data-success-url="/auth/confirm">
     <label for="username">Имя</label>
     <input id="username" name="username" type="text" placeholder="Как к вам обращаться" autocomplete="name" required>
 
     <label for="email">Email</label>
     <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
 
+    <p class="subtitle" style="color: #dc2626;" data-message hidden></p>
     <button type="submit" class="btn primary">Зарегистрироваться</button>
 </form>
 {% endblock %}

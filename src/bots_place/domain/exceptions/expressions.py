@@ -1,4 +1,7 @@
-class UnknownFieldError(Exception):
+from .base import AppError
+
+
+class UnknownFieldError(AppError):
     """Raised when an expression references a field absent on the model."""
 
     def __init__(self, model_name: str, field: str) -> None:
@@ -7,7 +10,7 @@ class UnknownFieldError(Exception):
         self.field = field
 
 
-class UnknownOperatorError(Exception):
+class UnknownOperatorError(AppError):
     """Raised when an expression uses an operator the parser does not support."""
 
     def __init__(self, operator: str) -> None:

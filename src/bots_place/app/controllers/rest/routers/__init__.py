@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 
-from .auth.router import auth_router
+from .auth.routers import api_router, template_router
 
 
 def include_routers(app: FastAPI) -> None:
-    app.include_router(auth_router)
+    app.include_router(template_router)
+    app.include_router(api_router)

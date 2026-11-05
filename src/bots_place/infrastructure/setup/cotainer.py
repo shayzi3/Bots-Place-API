@@ -5,19 +5,26 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from bots_place.app.security.tokens import TokenService
 from bots_place.app.tasks.email import EmailSender, SmtpEmailSender
-from bots_place.config.env import CookieSettings, JwtSettings, SmtpSettings
+from bots_place.config.env import (
+    CodeSettings,
+    CookieSettings,
+    JwtSettings,
+    SmtpSettings,
+)
 from bots_place.config.env import settings as app_settings
 from bots_place.domain.commands import (
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
+    ResendCodeCommand,
 )
 from bots_place.infrastructure.commands import (
     ConfirmLoginHandler,
     ConfirmRegistrationHandler,
     RegisterUserHandler,
     RequestLoginCodeHandler,
+    ResendCodeHandler,
 )
 from bots_place.infrastructure.mediator import Mediator
 from bots_place.infrastructure.repository.base import BaseUnitOfWork
@@ -46,6 +53,10 @@ class SettingsProvider(Provider):
     @provide(scope=Scope.APP)
     def provide_cookie_settings(self) -> CookieSettings:
         return app_settings.cookie
+
+    @provide(scope=Scope.APP)
+    def provide_code_settings(self) -> CodeSettings:
+        return app_settings.code
 
 
 class DatabaseProvider(Provider):
@@ -102,8 +113,9 @@ class CommandHandlerProvider(Provider):
     def provide_confirm_registration_handler(
         self,
         uow: BaseUnitOfWork,
+        code_settings: CodeSettings,
     ) -> ConfirmRegistrationHandler:
-        return ConfirmRegistrationHandler(uow)
+        return ConfirmRegistrationHandler(uow, code_settings)
 
     @provide(scope=Scope.REQUEST)
     def provide_request_login_code_handler(
@@ -118,8 +130,19 @@ class CommandHandlerProvider(Provider):
     def provide_confirm_login_handler(
         self,
         uow: BaseUnitOfWork,
+        code_settings: CodeSettings,
     ) -> ConfirmLoginHandler:
-        return ConfirmLoginHandler(uow)
+        return ConfirmLoginHandler(uow, code_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_resend_code_handler(
+        self,
+        uow: BaseUnitOfWork,
+        email_sender: EmailSender,
+        code_settings: CodeSettings,
+        jwt_settings: JwtSettings,
+    ) -> ResendCodeHandler:
+        return ResendCodeHandler(uow, email_sender, code_settings, jwt_settings)
 
 
 class MediatorProvider(Provider):
@@ -130,12 +153,14 @@ class MediatorProvider(Provider):
         confirm_registration: ConfirmRegistrationHandler,
         request_login_code: RequestLoginCodeHandler,
         confirm_login: ConfirmLoginHandler,
+        resend_code: ResendCodeHandler,
     ) -> Mediator:
         mediator = Mediator()
         mediator.register(RegisterUserCommand, register_user)
         mediator.register(ConfirmRegistrationCommand, confirm_registration)
         mediator.register(RequestLoginCodeCommand, request_login_code)
         mediator.register(ConfirmLoginCommand, confirm_login)
+        mediator.register(ResendCodeCommand, resend_code)
         return mediator
 
 

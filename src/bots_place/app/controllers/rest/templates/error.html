@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>Что-то пошло не так</h1>
-<p class="subtitle">Внутренняя ошибка сервера. Попробуйте позже.</p>
+<p class="subtitle">{{ message }}</p>
 <a class="btn primary" href="{{ login_url }}">Вернуться ко входу</a>
 {% endblock %}
 
