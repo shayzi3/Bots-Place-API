@@ -1,9 +1,15 @@
-from fastapi import Response
+from datetime import UTC, datetime, timedelta
 
+from fastapi import Request, Response
+
+from bots_place.app.security.tokens import (
+    ConfirmationPurpose,
+    ConfirmationTokenPayload,
+)
 from bots_place.config.env import CookieSettings
 
 ACCESS_COOKIE = "access_token"
-PENDING_COOKIE = "pending_token"
+CONFIRMATION_SESSION = "confirmation_payload"
 
 
 def set_auth_cookie(
@@ -35,3 +41,21 @@ def clear_auth_cookie(
         domain=settings.domain,
         path="/",
     )
+
+
+def set_request_session_confirmation(
+    request: Request,
+    email: str,
+    purpose: ConfirmationPurpose,
+    ttl_seconds: int,
+) -> None:
+    payload = ConfirmationTokenPayload(
+        email=email,
+        purpose=purpose,
+        expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),
+    )
+    request.session[CONFIRMATION_SESSION] = payload.model_dump(mode="json")
+
+
+def clear_request_session(request: Request) -> None:
+    request.session.pop(CONFIRMATION_SESSION, None)

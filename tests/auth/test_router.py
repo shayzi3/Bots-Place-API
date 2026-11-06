@@ -1,4 +1,7 @@
+import base64
+import json
 from collections.abc import AsyncGenerator, Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -6,11 +9,13 @@ import pytest
 from dishka import AsyncContainer, Provider, Scope, make_async_container
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+from itsdangerous import TimestampSigner
+from starlette.middleware.sessions import SessionMiddleware
 
 from bots_place.app.controllers.rest.routers import include_routers
 from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
     ACCESS_COOKIE,
-    PENDING_COOKIE,
+    CONFIRMATION_SESSION,
 )
 from bots_place.app.core.doc.auth.exception_msg import AuthExceptionMessageEnum
 from bots_place.app.core.doc.status_code import StatusCodeEnum
@@ -32,6 +37,9 @@ from bots_place.domain.exceptions.user import (
     ResendNotAllowedError,
 )
 from bots_place.infrastructure.mediator import Mediator
+
+SESSION_SECRET = "test-session-secret"
+SESSION_COOKIE = "session"
 
 
 class FakeMediator:
@@ -82,6 +90,7 @@ async def container(
 @pytest.fixture
 async def client(container: AsyncContainer) -> AsyncGenerator[httpx.AsyncClient]:
     app = FastAPI()
+    app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
     include_routers(app)
     setup_dishka(container, app)
     transport = httpx.ASGITransport(app=app)
@@ -99,8 +108,30 @@ def set_cookies() -> Callable[[httpx.Response], list[str]]:
     return _get
 
 
-def _pending_headers(token: str) -> dict[str, str]:
-    return {"cookie": f"{PENDING_COOKIE}={token}"}
+def _session_headers(
+    email: str = "user@example.com",
+    purpose: ConfirmationPurpose = ConfirmationPurpose.LOGIN,
+    *,
+    expires_in: int = 900,
+) -> dict[str, str]:
+    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+    data = {
+        CONFIRMATION_SESSION: {
+            "email": email,
+            "purpose": purpose.value,
+            "expires_at": expires_at.isoformat(),
+        }
+    }
+    raw = base64.b64encode(json.dumps(data).encode("utf-8"))
+    value = TimestampSigner(SESSION_SECRET).sign(raw).decode("utf-8")
+    return {"cookie": f"{SESSION_COOKIE}={value}"}
+
+
+def _session_data(headers: list[str]) -> dict[str, Any]:
+    value = _cookie_value(headers, SESSION_COOKIE).strip('"')
+    raw = TimestampSigner(SESSION_SECRET).unsign(value)
+    data: dict[str, Any] = json.loads(base64.b64decode(raw))
+    return data[CONFIRMATION_SESSION]
 
 
 def _cookie_header(headers: list[str], name: str) -> str | None:
@@ -116,11 +147,13 @@ def _cookie_value(headers: list[str], name: str) -> str:
     return header.split(";", 1)[0].split("=", 1)[1]
 
 
-async def test_login_page_renders_error_from_query(client: httpx.AsyncClient) -> None:
-    response = await client.get("/auth/login", params={"error": "login"})
+async def test_login_page_renders_google_error_from_query(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.get("/auth/login", params={"error": "google"})
 
     assert response.status_code == 200
-    assert "Пользователь не найден" in response.text
+    assert "Не удалось войти через Google" in response.text
 
 
 async def test_register_page_renders(client: httpx.AsyncClient) -> None:
@@ -130,10 +163,9 @@ async def test_register_page_renders(client: httpx.AsyncClient) -> None:
     assert 'name="email"' in response.text
 
 
-async def test_register_new_user_returns_ok_with_pending_cookie(
+async def test_register_new_user_stores_confirmation_in_session(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
-    tokens: TokenService,
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
     response = await client.post(
@@ -146,11 +178,12 @@ async def test_register_new_user_returns_ok_with_pending_cookie(
     assert mediator.commands == [
         RegisterUserCommand(email="new@example.com", username="new")
     ]
+    assert response.json()["data"] == {"retry_after": 60}
 
-    token = _cookie_value(set_cookies(response), PENDING_COOKIE)
-    payload = tokens.decode_confirmation(token)
-    assert payload.email == "new@example.com"
-    assert payload.purpose is ConfirmationPurpose.REGISTER
+    data = _session_data(set_cookies(response))
+    assert data["email"] == "new@example.com"
+    assert data["purpose"] == ConfirmationPurpose.REGISTER.value
+    assert "expires_at" in data
 
 
 async def test_register_existing_verified_user_returns_conflict(
@@ -169,13 +202,12 @@ async def test_register_existing_verified_user_returns_conflict(
     body = response.json()
     assert body["status_code"] == StatusCodeEnum.CONFLICT
     assert body["msg"] == AuthExceptionMessageEnum.EMAIL_ALREADY_EXISTS
-    assert _cookie_header(set_cookies(response), PENDING_COOKIE) is None
+    assert _cookie_header(set_cookies(response), SESSION_COOKIE) is None
 
 
-async def test_login_known_user_returns_ok_with_login_purpose(
+async def test_login_known_user_stores_login_confirmation_in_session(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
-    tokens: TokenService,
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
     response = await client.post(
@@ -184,9 +216,10 @@ async def test_login_known_user_returns_ok_with_login_purpose(
 
     assert response.status_code == StatusCodeEnum.OK
     assert mediator.commands == [RequestLoginCodeCommand(email="user@example.com")]
+    assert response.json()["data"] == {"retry_after": 60}
 
-    token = _cookie_value(set_cookies(response), PENDING_COOKIE)
-    assert tokens.decode_confirmation(token).purpose is ConfirmationPurpose.LOGIN
+    data = _session_data(set_cookies(response))
+    assert data["purpose"] == ConfirmationPurpose.LOGIN.value
 
 
 async def test_login_unknown_user_returns_forbidden(
@@ -202,10 +235,10 @@ async def test_login_unknown_user_returns_forbidden(
 
     assert response.status_code == StatusCodeEnum.FORBIDDEN
     assert response.json()["msg"] == AuthExceptionMessageEnum.LOGIN_NOT_ALLOWED
-    assert _cookie_header(set_cookies(response), PENDING_COOKIE) is None
+    assert _cookie_header(set_cookies(response), SESSION_COOKIE) is None
 
 
-async def test_confirm_page_without_cookie_redirects_to_login(
+async def test_confirm_page_without_session_redirects_to_login(
     client: httpx.AsyncClient,
 ) -> None:
     response = await client.get("/auth/confirm")
@@ -214,33 +247,27 @@ async def test_confirm_page_without_cookie_redirects_to_login(
     assert response.headers["location"] == "/auth/login"
 
 
-async def test_confirm_page_with_cookie_renders_form(
-    client: httpx.AsyncClient, tokens: TokenService
+async def test_confirm_page_with_session_renders_form(
+    client: httpx.AsyncClient,
 ) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
-
-    response = await client.get("/auth/confirm", headers=_pending_headers(token))
+    response = await client.get("/auth/confirm", headers=_session_headers())
 
     assert response.status_code == 200
     assert 'name="code"' in response.text
 
 
-async def test_confirm_page_shows_code_error(
-    client: httpx.AsyncClient, tokens: TokenService
+async def test_confirm_page_with_expired_session_redirects_to_login(
+    client: httpx.AsyncClient,
 ) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
-
     response = await client.get(
-        "/auth/confirm",
-        params={"error": "code"},
-        headers=_pending_headers(token),
+        "/auth/confirm", headers=_session_headers(expires_in=-1)
     )
 
-    assert response.status_code == 200
-    assert "Неверный или просроченный код" in response.text
+    assert response.status_code == StatusCodeEnum.SEE_OTHER
+    assert response.headers["location"] == "/auth/login"
 
 
-async def test_confirm_post_without_cookie_returns_unauthorized(
+async def test_confirm_post_without_session_returns_unauthorized(
     client: httpx.AsyncClient, mediator: FakeMediator
 ) -> None:
     response = await client.post("/api/v1/auth/confirm", data={"code": "123456"})
@@ -250,7 +277,7 @@ async def test_confirm_post_without_cookie_returns_unauthorized(
     assert mediator.commands == []
 
 
-async def test_confirm_registration_sets_access_cookie_and_clears_pending(
+async def test_confirm_registration_sets_access_cookie_and_clears_session(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
     tokens: TokenService,
@@ -258,14 +285,11 @@ async def test_confirm_registration_sets_access_cookie_and_clears_pending(
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
     mediator.result = make_user(id=7, email="user@example.com", is_verified=True)
-    pending_token = tokens.create_confirmation(
-        "user@example.com", ConfirmationPurpose.REGISTER
-    )
 
     response = await client.post(
         "/api/v1/auth/confirm",
         data={"code": "123456"},
-        headers=_pending_headers(pending_token),
+        headers=_session_headers("user@example.com", ConfirmationPurpose.REGISTER),
     )
 
     assert response.status_code == StatusCodeEnum.OK
@@ -278,27 +302,23 @@ async def test_confirm_registration_sets_access_cookie_and_clears_pending(
     assert payload.user_id == 7
     assert payload.email == "user@example.com"
 
-    pending = _cookie_header(headers, PENDING_COOKIE)
-    assert pending is not None
-    assert "Max-Age=0" in pending
+    session = _cookie_header(headers, SESSION_COOKIE)
+    assert session is not None
+    assert "1970" in session
 
 
 async def test_confirm_login_dispatches_login_command(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
-    tokens: TokenService,
     make_user: Callable[..., Any],
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
     mediator.result = make_user(id=3, email="user@example.com", is_verified=True)
-    pending_token = tokens.create_confirmation(
-        "user@example.com", ConfirmationPurpose.LOGIN
-    )
 
     response = await client.post(
         "/api/v1/auth/confirm",
         data={"code": "654321"},
-        headers=_pending_headers(pending_token),
+        headers=_session_headers("user@example.com", ConfirmationPurpose.LOGIN),
     )
 
     assert response.status_code == StatusCodeEnum.OK
@@ -311,18 +331,14 @@ async def test_confirm_login_dispatches_login_command(
 async def test_confirm_invalid_code_returns_bad_request(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
-    tokens: TokenService,
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
     mediator.error = InvalidEmailCodeError()
-    pending_token = tokens.create_confirmation(
-        "user@example.com", ConfirmationPurpose.REGISTER
-    )
 
     response = await client.post(
         "/api/v1/auth/confirm",
         data={"code": "000000"},
-        headers=_pending_headers(pending_token),
+        headers=_session_headers("user@example.com", ConfirmationPurpose.REGISTER),
     )
 
     assert response.status_code == StatusCodeEnum.BAD_REQUEST
@@ -330,27 +346,27 @@ async def test_confirm_invalid_code_returns_bad_request(
     assert _cookie_header(set_cookies(response), ACCESS_COOKIE) is None
 
 
-async def test_logout_clears_access_and_pending_cookies(
+async def test_logout_clears_access_cookie_and_session(
     client: httpx.AsyncClient,
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
-    response = await client.post("/api/v1/auth/logout")
+    response = await client.post("/api/v1/auth/logout", headers=_session_headers())
 
     assert response.status_code == StatusCodeEnum.OK
 
     headers = set_cookies(response)
-    for name in (ACCESS_COOKIE, PENDING_COOKIE):
-        header = _cookie_header(headers, name)
-        assert header is not None
-        assert "Max-Age=0" in header
+    access = _cookie_header(headers, ACCESS_COOKIE)
+    session = _cookie_header(headers, SESSION_COOKIE)
+    assert access is not None
+    assert "Max-Age=0" in access
+    assert session is not None
+    assert "1970" in session
 
 
 async def test_confirm_page_renders_resend_button(
-    client: httpx.AsyncClient, tokens: TokenService
+    client: httpx.AsyncClient,
 ) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
-
-    response = await client.get("/auth/confirm", headers=_pending_headers(token))
+    response = await client.get("/auth/confirm", headers=_session_headers())
 
     assert response.status_code == 200
     assert 'action="/api/v1/auth/resend"' in response.text
@@ -358,23 +374,7 @@ async def test_confirm_page_renders_resend_button(
     assert "data-seconds" not in response.text
 
 
-async def test_confirm_page_disables_resend_button_during_cooldown(
-    client: httpx.AsyncClient, tokens: TokenService
-) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
-
-    response = await client.get(
-        "/auth/confirm",
-        params={"error": "cooldown", "retry": "42"},
-        headers=_pending_headers(token),
-    )
-
-    assert response.status_code == 200
-    assert 'data-seconds="42"' in response.text
-    assert "disabled" in response.text
-
-
-async def test_resend_without_cookie_returns_unauthorized(
+async def test_resend_without_session_returns_unauthorized(
     client: httpx.AsyncClient, mediator: FakeMediator
 ) -> None:
     response = await client.post("/api/v1/auth/resend")
@@ -384,15 +384,21 @@ async def test_resend_without_cookie_returns_unauthorized(
     assert mediator.commands == []
 
 
-async def test_resend_registration_returns_ok_with_retry_after(
-    client: httpx.AsyncClient, mediator: FakeMediator, tokens: TokenService
+async def test_resend_registration_returns_ok_and_extends_session(
+    client: httpx.AsyncClient,
+    mediator: FakeMediator,
+    set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.REGISTER)
-
-    response = await client.post("/api/v1/auth/resend", headers=_pending_headers(token))
+    response = await client.post(
+        "/api/v1/auth/resend",
+        headers=_session_headers("user@example.com", ConfirmationPurpose.REGISTER),
+    )
 
     assert response.status_code == StatusCodeEnum.OK
     assert response.json()["data"] == {"retry_after": 60}
+    data = _session_data(set_cookies(response))
+    assert data["email"] == "user@example.com"
+    assert data["purpose"] == ConfirmationPurpose.REGISTER.value
     assert mediator.commands == [
         ResendCodeCommand(
             email="user@example.com", purpose=EmailCodePurposeEnum.REGISTRATION
@@ -401,11 +407,12 @@ async def test_resend_registration_returns_ok_with_retry_after(
 
 
 async def test_resend_login_dispatches_login_purpose(
-    client: httpx.AsyncClient, mediator: FakeMediator, tokens: TokenService
+    client: httpx.AsyncClient, mediator: FakeMediator
 ) -> None:
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
-
-    await client.post("/api/v1/auth/resend", headers=_pending_headers(token))
+    await client.post(
+        "/api/v1/auth/resend",
+        headers=_session_headers("user@example.com", ConfirmationPurpose.LOGIN),
+    )
 
     assert mediator.commands == [
         ResendCodeCommand(email="user@example.com", purpose=EmailCodePurposeEnum.LOGIN)
@@ -413,14 +420,11 @@ async def test_resend_login_dispatches_login_purpose(
 
 
 async def test_resend_during_cooldown_returns_too_many_requests(
-    client: httpx.AsyncClient,
-    mediator: FakeMediator,
-    tokens: TokenService,
+    client: httpx.AsyncClient, mediator: FakeMediator
 ) -> None:
     mediator.error = ResendCooldownError(retry_after=33)
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
 
-    response = await client.post("/api/v1/auth/resend", headers=_pending_headers(token))
+    response = await client.post("/api/v1/auth/resend", headers=_session_headers())
 
     assert response.status_code == StatusCodeEnum.TOO_MANY_REQUESTS
     body = response.json()
@@ -429,12 +433,11 @@ async def test_resend_during_cooldown_returns_too_many_requests(
 
 
 async def test_resend_not_allowed_returns_forbidden(
-    client: httpx.AsyncClient, mediator: FakeMediator, tokens: TokenService
+    client: httpx.AsyncClient, mediator: FakeMediator
 ) -> None:
     mediator.error = ResendNotAllowedError("user@example.com")
-    token = tokens.create_confirmation("user@example.com", ConfirmationPurpose.LOGIN)
 
-    response = await client.post("/api/v1/auth/resend", headers=_pending_headers(token))
+    response = await client.post("/api/v1/auth/resend", headers=_session_headers())
 
     assert response.status_code == StatusCodeEnum.FORBIDDEN
     assert response.json()["msg"] == AuthExceptionMessageEnum.RESEND_NOT_ALLOWED

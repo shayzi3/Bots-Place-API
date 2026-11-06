@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 import jwt
+from pydantic import BaseModel, ValidationError
 
 from bots_place.config.env import JwtSettings
 from bots_place.domain.exceptions.user import InvalidTokenError
@@ -11,7 +11,6 @@ from bots_place.domain.exceptions.user import InvalidTokenError
 
 class TokenType(StrEnum):
     ACCESS = "access"
-    CONFIRMATION = "confirmation"
 
 
 class ConfirmationPurpose(StrEnum):
@@ -19,16 +18,15 @@ class ConfirmationPurpose(StrEnum):
     LOGIN = "login"
 
 
-@dataclass(frozen=True)
-class AccessTokenPayload:
+class AccessTokenPayload(BaseModel):
     user_id: int
     email: str
 
 
-@dataclass(frozen=True)
-class ConfirmationTokenPayload:
+class ConfirmationTokenPayload(BaseModel):
     email: str
     purpose: ConfirmationPurpose
+    expires_at: datetime
 
 
 class TokenService:
@@ -80,29 +78,8 @@ class TokenService:
     def decode_access(self, token: str) -> AccessTokenPayload:
         data = self._decode(token, TokenType.ACCESS)
         try:
-            return AccessTokenPayload(
-                user_id=int(data["sub"]),
-                email=data["email"],
+            return AccessTokenPayload.model_validate(
+                {"user_id": data.get("sub"), "email": data.get("email")},
             )
-        except (KeyError, ValueError, TypeError) as exc:
+        except ValidationError as exc:
             raise InvalidTokenError("Malformed access token") from exc
-
-    def create_confirmation(self, email: str, purpose: ConfirmationPurpose) -> str:
-        return self._encode(
-            {
-                "type": TokenType.CONFIRMATION.value,
-                "email": email,
-                "purpose": purpose.value,
-            },
-            self.confirmation_ttl_seconds,
-        )
-
-    def decode_confirmation(self, token: str) -> ConfirmationTokenPayload:
-        data = self._decode(token, TokenType.CONFIRMATION)
-        try:
-            return ConfirmationTokenPayload(
-                email=data["email"],
-                purpose=ConfirmationPurpose(data["purpose"]),
-            )
-        except (KeyError, ValueError) as exc:
-            raise InvalidTokenError("Malformed confirmation token") from exc

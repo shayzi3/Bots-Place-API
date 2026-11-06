@@ -2,7 +2,6 @@ from fastapi import Response
 
 from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
     ACCESS_COOKIE,
-    PENDING_COOKIE,
     clear_auth_cookie,
     set_auth_cookie,
 )
@@ -36,9 +35,9 @@ def test_set_auth_cookie_without_secure_flags() -> None:
     response = Response()
     settings = CookieSettings(secure=False, samesite="lax")
 
-    set_auth_cookie(response, PENDING_COOKIE, "pending", 900, settings)
+    set_auth_cookie(response, ACCESS_COOKIE, "pending", 900, settings)
 
-    header = _set_cookie_header(response, PENDING_COOKIE)
+    header = _set_cookie_header(response, ACCESS_COOKIE)
     assert "HttpOnly" in header
     assert "Secure" not in header
     assert "SameSite=lax" in header
@@ -48,9 +47,9 @@ def test_set_auth_cookie_without_secure_flags() -> None:
 def test_clear_auth_cookie_expires_cookie() -> None:
     response = Response()
 
-    clear_auth_cookie(response, PENDING_COOKIE, CookieSettings())
+    clear_auth_cookie(response, ACCESS_COOKIE, CookieSettings())
 
-    header = _set_cookie_header(response, PENDING_COOKIE)
-    assert header.startswith(f"{PENDING_COOKIE}=")
+    header = _set_cookie_header(response, ACCESS_COOKIE)
+    assert header.startswith(f"{ACCESS_COOKIE}=")
     assert "Max-Age=0" in header
     assert "Path=/" in header

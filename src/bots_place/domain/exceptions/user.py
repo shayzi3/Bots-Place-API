@@ -1,7 +1,11 @@
 from .base import AppError
 
 
-class EmailAlreadyExistsError(AppError):
+class UserError(AppError):
+    """Base class for user and authentication failures."""
+
+
+class EmailAlreadyExistsError(UserError):
     """Raised when a user with the given email already exists."""
 
     def __init__(self, email: str) -> None:
@@ -9,7 +13,7 @@ class EmailAlreadyExistsError(AppError):
         self.email = email
 
 
-class LoginNotAllowedError(AppError):
+class LoginNotAllowedError(UserError):
     """Raised when login is requested for an unknown or unverified user."""
 
     def __init__(self, email: str) -> None:
@@ -17,15 +21,15 @@ class LoginNotAllowedError(AppError):
         self.email = email
 
 
-class InvalidEmailCodeError(AppError):
+class InvalidEmailCodeError(UserError):
     """Raised when the email confirmation code is missing, wrong or expired."""
 
 
-class InvalidTokenError(AppError):
+class InvalidTokenError(UserError):
     """Raised when a JWT token is missing, malformed or expired."""
 
 
-class ResendNotAllowedError(AppError):
+class ResendNotAllowedError(UserError):
     """Raised when a code cannot be resent for the given email and purpose."""
 
     def __init__(self, email: str) -> None:
@@ -33,7 +37,7 @@ class ResendNotAllowedError(AppError):
         self.email = email
 
 
-class ResendCooldownError(AppError):
+class ResendCooldownError(UserError):
     """Raised when a code is requested again before the cooldown has passed."""
 
     def __init__(self, retry_after: int) -> None:

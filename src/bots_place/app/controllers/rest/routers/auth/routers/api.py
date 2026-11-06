@@ -1,8 +1,8 @@
 from typing import Annotated, Any
 
 from dishka.integrations.fastapi import FromDishka
-from fastapi import APIRouter, Form
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from bots_place.app.controllers.rest.response import BaseResponse, error, ok
 from bots_place.app.controllers.rest.route import ApiExceptionRoute
@@ -15,9 +15,10 @@ from bots_place.app.controllers.rest.routers.auth.schema.retry import (
 )
 from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
     ACCESS_COOKIE,
-    PENDING_COOKIE,
     clear_auth_cookie,
+    clear_request_session,
     set_auth_cookie,
+    set_request_session_confirmation,
 )
 from bots_place.app.core.api_path import AuthPathEnum
 from bots_place.app.core.doc.auth import AuthSummaryEnum
@@ -25,16 +26,22 @@ from bots_place.app.core.doc.auth.exception_msg import AuthExceptionMessageEnum
 from bots_place.app.core.doc.auth.success_msg import AuthSuccessMessageEnum
 from bots_place.app.core.doc.base_exception_msg import BaseExceptionMessageEnum
 from bots_place.app.core.doc.status_code import StatusCodeEnum
-from bots_place.app.security.tokens import ConfirmationPurpose, TokenService
+from bots_place.app.security.google_auth.base import GoogleAuth
+from bots_place.app.security.tokens import (
+    ConfirmationPurpose,
+    TokenService,
+)
 from bots_place.config.env import CodeSettings, CookieSettings
 from bots_place.domain.commands import (
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
+    GoogleLoginCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
     ResendCodeCommand,
 )
 from bots_place.domain.entities.email_code import EmailCodePurposeEnum
+from bots_place.domain.exceptions.google import GoogleAuthError
 from bots_place.domain.exceptions.user import (
     EmailAlreadyExistsError,
     InvalidEmailCodeError,
@@ -67,7 +74,7 @@ VALIDATION_RESPONSE: dict[int | str, dict[str, Any]] = {
     tags=["Auth API"],
     responses={
         StatusCodeEnum.OK: {
-            "model": BaseResponse,
+            "model": BaseResponse[RetryAfterSchema],
             "description": AuthSuccessMessageEnum.REGISTER_CODE_SENT,
         },
         **VALIDATION_RESPONSE,
@@ -82,7 +89,8 @@ async def register_user(
     command: Annotated[RegisterUserCommand, Form()],
     mediator: FromDishka[Mediator],
     tokens: FromDishka[TokenService],
-    cookies: FromDishka[CookieSettings],
+    code_settings: FromDishka[CodeSettings],
+    request: Request,
 ) -> JSONResponse:
     try:
         await mediator.send(command)
@@ -92,18 +100,13 @@ async def register_user(
             AuthExceptionMessageEnum.EMAIL_ALREADY_EXISTS,
         )
 
-    confirmation = tokens.create_confirmation(
-        command.email, ConfirmationPurpose.REGISTER
+    set_request_session_confirmation(
+        request=request,
+        email=command.email,
+        purpose=ConfirmationPurpose.REGISTER,
+        ttl_seconds=tokens.confirmation_ttl_seconds,
     )
-    response = ok()
-    set_auth_cookie(
-        response,
-        PENDING_COOKIE,
-        confirmation,
-        tokens.confirmation_ttl_seconds,
-        cookies,
-    )
-    return response
+    return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
 @api_router.post(
@@ -112,7 +115,7 @@ async def register_user(
     tags=["Auth API"],
     responses={
         StatusCodeEnum.OK: {
-            "model": BaseResponse,
+            "model": BaseResponse[RetryAfterSchema],
             "description": AuthSuccessMessageEnum.LOGIN_CODE_SENT,
         },
         **VALIDATION_RESPONSE,
@@ -127,7 +130,8 @@ async def login_user(
     command: Annotated[RequestLoginCodeCommand, Form()],
     mediator: FromDishka[Mediator],
     tokens: FromDishka[TokenService],
-    cookies: FromDishka[CookieSettings],
+    code_settings: FromDishka[CodeSettings],
+    request: Request,
 ) -> JSONResponse:
     try:
         await mediator.send(command)
@@ -137,16 +141,13 @@ async def login_user(
             AuthExceptionMessageEnum.LOGIN_NOT_ALLOWED,
         )
 
-    confirmation = tokens.create_confirmation(command.email, ConfirmationPurpose.LOGIN)
-    response = ok()
-    set_auth_cookie(
-        response,
-        PENDING_COOKIE,
-        confirmation,
-        tokens.confirmation_ttl_seconds,
-        cookies,
+    set_request_session_confirmation(
+        request=request,
+        email=command.email,
+        purpose=ConfirmationPurpose.LOGIN,
+        ttl_seconds=tokens.confirmation_ttl_seconds,
     )
-    return response
+    return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
 @api_router.post(
@@ -176,6 +177,7 @@ async def confirm(
     mediator: FromDishka[Mediator],
     tokens: FromDishka[TokenService],
     cookies: FromDishka[CookieSettings],
+    request: Request,
 ) -> JSONResponse:
     if confirmation is None:
         return error(
@@ -204,7 +206,7 @@ async def confirm(
 
     access = tokens.create_access(user.id, user.email)
     response = ok()
-    clear_auth_cookie(response, PENDING_COOKIE, cookies)
+    clear_request_session(request)
     set_auth_cookie(response, ACCESS_COOKIE, access, tokens.access_ttl_seconds, cookies)
     return response
 
@@ -237,6 +239,8 @@ async def resend_code(
     confirmation: Confirmation,
     mediator: FromDishka[Mediator],
     code_settings: FromDishka[CodeSettings],
+    tokens: FromDishka[TokenService],
+    request: Request,
 ) -> JSONResponse:
     if confirmation is None:
         return error(
@@ -265,6 +269,12 @@ async def resend_code(
             AuthExceptionMessageEnum.RESEND_NOT_ALLOWED,
         )
 
+    set_request_session_confirmation(
+        request=request,
+        email=confirmation.email,
+        purpose=confirmation.purpose,
+        ttl_seconds=tokens.confirmation_ttl_seconds,
+    )
     return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
@@ -281,9 +291,50 @@ async def resend_code(
     },
 )
 async def logout_user(
-    cookies: FromDishka[CookieSettings],
+    cookies: FromDishka[CookieSettings], request: Request
 ) -> JSONResponse:
     response = ok()
     clear_auth_cookie(response, ACCESS_COOKIE, cookies)
-    clear_auth_cookie(response, PENDING_COOKIE, cookies)
+    clear_request_session(request)
+    return response
+
+
+@api_router.get(
+    AuthPathEnum.GOOGLE_LOGIN,
+    summary=AuthSummaryEnum.GOOGLE_LOGIN,
+    tags=["Auth API"],
+)
+async def google_login(
+    request: Request,
+    google: FromDishka[GoogleAuth],
+) -> Response:
+    return await google.authorize_redirect(request)
+
+
+@api_router.get(
+    AuthPathEnum.GOOGLE_CALLBACK,
+    summary=AuthSummaryEnum.GOOGLE_CALLBACK,
+    tags=["Auth API"],
+)
+async def google_callback(
+    request: Request,
+    google: FromDishka[GoogleAuth],
+    mediator: FromDishka[Mediator],
+    tokens: FromDishka[TokenService],
+    cookies: FromDishka[CookieSettings],
+) -> RedirectResponse:
+    try:
+        info = await google.fetch_user(request)
+        user = await mediator.send(
+            GoogleLoginCommand(email=info.email, username=info.name)
+        )
+    except GoogleAuthError:
+        return RedirectResponse(
+            f"{AuthPathEnum.PAGE_LOGIN}?error=google",
+            status_code=StatusCodeEnum.SEE_OTHER,
+        )
+
+    access = tokens.create_access(user.id, user.email)
+    response = RedirectResponse("/", status_code=StatusCodeEnum.SEE_OTHER)
+    set_auth_cookie(response, ACCESS_COOKIE, access, tokens.access_ttl_seconds, cookies)
     return response

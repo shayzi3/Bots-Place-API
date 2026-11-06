@@ -6,8 +6,8 @@
 <h1>Добро пожаловать</h1>
 <p class="subtitle">Войдите в Bots Place</p>
 
-{% if error == "login" %}
-<p class="subtitle" style="color: #dc2626;">Пользователь не найден или email не подтверждён.</p>
+{% if error == "google" %}
+<p class="subtitle" style="color: #dc2626;">Не удалось войти через Google. Попробуйте ещё раз.</p>
 {% endif %}
 
 <form method="post" action="{{ login_url }}" data-api data-success-url="/auth/confirm">

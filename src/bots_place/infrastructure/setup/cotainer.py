@@ -3,11 +3,14 @@ from collections.abc import AsyncGenerator
 from dishka import AsyncContainer, Provider, Scope, make_async_container, provide
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from bots_place.app.security.google_auth.base import GoogleAuth
+from bots_place.app.security.google_auth.oauth import AuthlibGoogleAuth
 from bots_place.app.security.tokens import TokenService
 from bots_place.app.tasks.email import EmailSender, SmtpEmailSender
 from bots_place.config.env import (
     CodeSettings,
     CookieSettings,
+    GoogleSettings,
     JwtSettings,
     SmtpSettings,
 )
@@ -15,6 +18,7 @@ from bots_place.config.env import settings as app_settings
 from bots_place.domain.commands import (
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
+    GoogleLoginCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
     ResendCodeCommand,
@@ -22,6 +26,7 @@ from bots_place.domain.commands import (
 from bots_place.infrastructure.commands import (
     ConfirmLoginHandler,
     ConfirmRegistrationHandler,
+    GoogleLoginHandler,
     RegisterUserHandler,
     RequestLoginCodeHandler,
     ResendCodeHandler,
@@ -57,6 +62,10 @@ class SettingsProvider(Provider):
     @provide(scope=Scope.APP)
     def provide_code_settings(self) -> CodeSettings:
         return app_settings.code
+
+    @provide(scope=Scope.APP)
+    def provide_google_settings(self) -> GoogleSettings:
+        return app_settings.google
 
 
 class DatabaseProvider(Provider):
@@ -99,6 +108,12 @@ class TokenProvider(Provider):
         return TokenService(jwt_settings)
 
 
+class AuthProvider(Provider):
+    @provide(scope=Scope.APP)
+    def provide_google_auth(self, google_settings: GoogleSettings) -> GoogleAuth:
+        return AuthlibGoogleAuth(google_settings)
+
+
 class CommandHandlerProvider(Provider):
     @provide(scope=Scope.REQUEST)
     def provide_register_user_handler(
@@ -135,6 +150,13 @@ class CommandHandlerProvider(Provider):
         return ConfirmLoginHandler(uow, code_settings)
 
     @provide(scope=Scope.REQUEST)
+    def provide_google_login_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> GoogleLoginHandler:
+        return GoogleLoginHandler(uow)
+
+    @provide(scope=Scope.REQUEST)
     def provide_resend_code_handler(
         self,
         uow: BaseUnitOfWork,
@@ -154,6 +176,7 @@ class MediatorProvider(Provider):
         request_login_code: RequestLoginCodeHandler,
         confirm_login: ConfirmLoginHandler,
         resend_code: ResendCodeHandler,
+        google_login: GoogleLoginHandler,
     ) -> Mediator:
         mediator = Mediator()
         mediator.register(RegisterUserCommand, register_user)
@@ -161,6 +184,7 @@ class MediatorProvider(Provider):
         mediator.register(RequestLoginCodeCommand, request_login_code)
         mediator.register(ConfirmLoginCommand, confirm_login)
         mediator.register(ResendCodeCommand, resend_code)
+        mediator.register(GoogleLoginCommand, google_login)
         return mediator
 
 
@@ -172,6 +196,7 @@ def create_container() -> AsyncContainer:
         UnitOfWorkProvider(),
         EmailProvider(),
         TokenProvider(),
+        AuthProvider(),
         CommandHandlerProvider(),
         MediatorProvider(),
     )

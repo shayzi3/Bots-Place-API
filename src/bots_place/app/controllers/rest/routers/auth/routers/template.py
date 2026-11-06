@@ -22,7 +22,7 @@ async def login_page(request: Request) -> HTMLResponse:
         "login.html",
         {
             "login_url": AuthPathEnum.API_LOGIN,
-            "google_url": "#",
+            "google_url": AuthPathEnum.GOOGLE_LOGIN,
             "register_url": AuthPathEnum.PAGE_REGISTER,
             "error": request.query_params.get("error"),
         },
@@ -41,7 +41,7 @@ async def register_page(request: Request) -> HTMLResponse:
         "register.html",
         {
             "register_url": AuthPathEnum.API_REGISTER,
-            "google_url": "#",
+            "google_url": AuthPathEnum.GOOGLE_LOGIN,
             "login_url": AuthPathEnum.PAGE_LOGIN,
         },
     )
@@ -59,18 +59,13 @@ async def confirm_page(
     confirmation: Confirmation,
 ) -> HTMLResponse | RedirectResponse:
     if confirmation is not None:
-        retry = request.query_params.get("retry", "")
         return templates.TemplateResponse(
             request,
             "confirm.html",
             {
                 "confirm_url": AuthPathEnum.API_CONFIRM,
                 "resend_url": AuthPathEnum.API_RESEND,
-                "google_url": "#",
                 "email": confirmation.email,
-                "error": request.query_params.get("error"),
-                "resent": request.query_params.get("resent"),
-                "retry": int(retry) if retry.isdigit() else None,
             },
         )
     return RedirectResponse(AuthPathEnum.PAGE_LOGIN, status_code=303)

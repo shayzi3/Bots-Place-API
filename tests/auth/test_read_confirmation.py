@@ -1,83 +1,73 @@
-from fastapi import FastAPI
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
 from starlette.requests import Request
 
 from bots_place.app.controllers.rest.routers.auth.depends.read_confirmation import (
     ReadConfirmation,
 )
-from bots_place.app.security.tokens import ConfirmationPurpose, TokenService
-from bots_place.config.env import JwtSettings
+from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
+    CONFIRMATION_SESSION,
+)
+from bots_place.app.security.tokens import ConfirmationPurpose
 
 
-class FakeContainer:
-    def __init__(self, tokens: TokenService) -> None:
-        self._tokens = tokens
-
-    async def get(self, _type: object) -> TokenService:
-        return self._tokens
-
-
-def make_service(*, pending_ttl_minutes: int = 15) -> TokenService:
-    return TokenService(
-        JwtSettings(
-            secret="x" * 32,
-            algorithm="HS256",
-            access_ttl_minutes=60,
-            pending_ttl_minutes=pending_ttl_minutes,
-        )
-    )
-
-
-def make_request(tokens: TokenService, cookie: str | None = None) -> Request:
-    headers = []
-    if cookie is not None:
-        headers.append((b"cookie", f"pending_token={cookie}".encode()))
+def make_request(session: dict[str, Any]) -> Request:
     scope = {
         "type": "http",
         "method": "GET",
         "path": "/auth/confirm",
-        "headers": headers,
+        "headers": [],
         "query_string": b"",
-        "app": FastAPI(),
-        "state": {"dishka_container": FakeContainer(tokens)},
+        "session": session,
     }
     return Request(scope)
 
 
-async def test_no_cookie_returns_none() -> None:
-    result = await ReadConfirmation()(make_request(make_service()))
+def make_session(
+    *,
+    expires_in: int = 900,
+    email: str = "a@b.c",
+    purpose: str = ConfirmationPurpose.REGISTER.value,
+) -> dict[str, Any]:
+    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+    return {
+        CONFIRMATION_SESSION: {
+            "email": email,
+            "purpose": purpose,
+            "expires_at": expires_at.isoformat(),
+        }
+    }
+
+
+async def test_empty_session_returns_none() -> None:
+    result = await ReadConfirmation()(make_request({}))
     assert result is None
 
 
-async def test_valid_cookie_returns_payload() -> None:
-    service = make_service()
-    token = service.create_confirmation("a@b.c", ConfirmationPurpose.REGISTER)
-    result = await ReadConfirmation()(make_request(service, token))
+async def test_valid_session_returns_payload() -> None:
+    result = await ReadConfirmation()(make_request(make_session()))
     assert result is not None
     assert result.email == "a@b.c"
     assert result.purpose is ConfirmationPurpose.REGISTER
 
 
-async def test_invalid_cookie_returns_none() -> None:
-    result = await ReadConfirmation()(make_request(make_service(), "garbage"))
+async def test_expired_session_returns_none_and_is_removed() -> None:
+    session = make_session(expires_in=-1)
+    result = await ReadConfirmation()(make_request(session))
     assert result is None
+    assert CONFIRMATION_SESSION not in session
 
 
-async def test_expired_cookie_returns_none() -> None:
-    service = make_service(pending_ttl_minutes=-1)
-    token = service.create_confirmation("a@b.c", ConfirmationPurpose.LOGIN)
-    result = await ReadConfirmation()(make_request(service, token))
+async def test_malformed_session_returns_none_and_is_removed() -> None:
+    session = {CONFIRMATION_SESSION: {"email": "a@b.c"}}
+    result = await ReadConfirmation()(make_request(session))
     assert result is None
+    assert CONFIRMATION_SESSION not in session
 
 
-async def test_access_token_in_pending_cookie_returns_none() -> None:
-    service = make_service()
-    token = service.create_access(1, "a@b.c")
-    result = await ReadConfirmation()(make_request(service, token))
-    assert result is None
-
-
-async def test_tampered_cookie_returns_none() -> None:
-    service = make_service()
-    token = service.create_confirmation("a@b.c", ConfirmationPurpose.LOGIN) + "x"
-    result = await ReadConfirmation()(make_request(service, token))
+async def test_unknown_purpose_returns_none() -> None:
+    result = await ReadConfirmation()(
+        make_request(make_session(purpose="reset-password"))
+    )
     assert result is None

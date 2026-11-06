@@ -1,7 +1,11 @@
 from .base import AppError
 
 
-class UnknownFieldError(AppError):
+class ExpressionError(AppError):
+    """Base class for expression parsing and evaluation failures."""
+
+
+class UnknownFieldError(ExpressionError):
     """Raised when an expression references a field absent on the model."""
 
     def __init__(self, model_name: str, field: str) -> None:
@@ -10,7 +14,7 @@ class UnknownFieldError(AppError):
         self.field = field
 
 
-class UnknownOperatorError(AppError):
+class UnknownOperatorError(ExpressionError):
     """Raised when an expression uses an operator the parser does not support."""
 
     def __init__(self, operator: str) -> None:

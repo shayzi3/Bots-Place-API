@@ -14,3 +14,5 @@ class AuthPathEnum(StrEnum):
     API_CONFIRM = f"{VERSION_PREFIX}{PREFIX}/confirm"
     API_RESEND = f"{VERSION_PREFIX}{PREFIX}/resend"
     API_LOGOUT = f"{VERSION_PREFIX}{PREFIX}/logout"
+    GOOGLE_LOGIN = f"{PREFIX}/google"
+    GOOGLE_CALLBACK = f"{PREFIX}/google/callback"

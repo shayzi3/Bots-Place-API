@@ -2,6 +2,7 @@
     "use strict";
 
     const UNAUTHORIZED = 401;
+    const COOLDOWN_KEY = "cooldown:resend";
 
     function setMessage(form, text) {
         const box = form.querySelector("[data-message]");
@@ -10,21 +11,17 @@
         box.hidden = !text;
     }
 
-    function cooldownKey(form) {
-        return "cooldown:" + form.getAttribute("action");
-    }
-
-    function saveCooldown(form, seconds) {
+    function saveCooldown(seconds) {
         try {
-            localStorage.setItem(cooldownKey(form), String(Date.now() + seconds * 1000));
+            localStorage.setItem(COOLDOWN_KEY, String(Date.now() + seconds * 1000));
         } catch (error) {
             return;
         }
     }
 
-    function savedCooldown(form) {
+    function savedCooldown() {
         try {
-            const expiresAt = localStorage.getItem(cooldownKey(form));
+            const expiresAt = localStorage.getItem(COOLDOWN_KEY);
             if (expiresAt === null) return null;
             return Math.max(0, Math.ceil((Number(expiresAt) - Date.now()) / 1000));
         } catch (error) {
@@ -32,15 +29,21 @@
         }
     }
 
-    function clearCooldown(form) {
+    function clearCooldown() {
         try {
-            localStorage.removeItem(cooldownKey(form));
+            localStorage.removeItem(COOLDOWN_KEY);
         } catch (error) {
             return;
         }
     }
 
-    function countdown(form, button, seconds) {
+    function rememberCooldown(payload) {
+        if (payload.data && payload.data.retry_after) {
+            saveCooldown(payload.data.retry_after);
+        }
+    }
+
+    function countdown(button, seconds) {
         const label = button.dataset.label || button.textContent.trim();
         let left = seconds;
         button.disabled = true;
@@ -50,7 +53,7 @@
             left -= 1;
             if (left <= 0) {
                 clearInterval(timer);
-                clearCooldown(form);
+                clearCooldown();
                 button.disabled = false;
                 button.textContent = label;
                 return;
@@ -59,10 +62,9 @@
         }, 1000);
     }
 
-    function startCooldown(form, button, payload) {
+    function startCooldown(button, payload) {
         if (button && payload.data && payload.data.retry_after) {
-            saveCooldown(form, payload.data.retry_after);
-            countdown(form, button, payload.data.retry_after);
+            countdown(button, payload.data.retry_after);
         }
     }
 
@@ -93,9 +95,12 @@
 
         if (!response.ok) {
             setMessage(form, payload.msg);
-            startCooldown(form, button, payload);
+            rememberCooldown(payload);
+            startCooldown(button, payload);
             return;
         }
+
+        rememberCooldown(payload);
 
         if (form.dataset.successUrl) {
             window.location.assign(form.dataset.successUrl);
@@ -103,7 +108,7 @@
         }
 
         setMessage(form, form.dataset.successMessage || "");
-        startCooldown(form, button, payload);
+        startCooldown(button, payload);
     }
 
     function init() {
@@ -115,12 +120,11 @@
 
         const resend = document.getElementById("resend-btn");
         if (resend) {
-            const saved = savedCooldown(resend.form);
-            const left = saved === null ? parseInt(resend.dataset.seconds || "0", 10) : saved;
+            const left = savedCooldown() ?? 0;
             if (left > 0) {
-                countdown(resend.form, resend, left);
+                countdown(resend, left);
             } else {
-                clearCooldown(resend.form);
+                clearCooldown();
                 resend.disabled = false;
             }
         }

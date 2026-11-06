@@ -1,30 +1,36 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
-from dishka import AsyncContainer
 from fastapi import Depends, Request
+from pydantic import ValidationError
 
-from bots_place.app.controllers.rest.routers.auth.utils.cookies import PENDING_COOKIE
-from bots_place.app.security.tokens import ConfirmationTokenPayload, TokenService
-from bots_place.domain.exceptions.user import InvalidTokenError
+from bots_place.app.controllers.rest.routers.auth.utils.cookies import (
+    CONFIRMATION_SESSION,
+    clear_request_session,
+)
+from bots_place.app.security.tokens import ConfirmationTokenPayload
 
 
 class ReadConfirmation:
-    """FastAPI dependency: decodes the confirmation token from the cookie.
+    """FastAPI dependency: reads the pending confirmation from the session.
 
-    Returns ``None`` when the cookie is missing or the token is invalid/expired.
+    Returns ``None`` when the session has no confirmation. Malformed or expired
+    confirmations are removed from the session and also return ``None``.
     """
 
     async def __call__(self, request: Request) -> ConfirmationTokenPayload | None:
-        container: AsyncContainer = request.state.dishka_container
-        tokens = await container.get(TokenService)
-
-        token = request.cookies.get(PENDING_COOKIE)
-        if not token:
+        data = request.session.get(CONFIRMATION_SESSION)
+        if data is None:
             return None
         try:
-            return tokens.decode_confirmation(token)
-        except InvalidTokenError:
+            payload = ConfirmationTokenPayload.model_validate(data)
+        except ValidationError:
+            clear_request_session(request)
             return None
+        if payload.expires_at <= datetime.now(UTC):
+            clear_request_session(request)
+            return None
+        return payload
 
 
 Confirmation = Annotated[ConfirmationTokenPayload | None, Depends(ReadConfirmation())]
