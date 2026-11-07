@@ -1,9 +1,11 @@
 from typing import Any, TypeVar
 
+from pydantic import BaseModel
+
 from bots_place.domain.exceptions.mediator import HandlerNotFoundError
 from bots_place.infrastructure.commands.base import CommandHandler
 
-C = TypeVar("C")
+C = TypeVar("C", bound=BaseModel)
 R = TypeVar("R")
 
 

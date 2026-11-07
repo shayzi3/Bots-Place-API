@@ -3,6 +3,7 @@ from typing import Any
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from bots_place.app.core.doc.base_exception_msg import BaseExceptionMessageEnum
 from bots_place.app.core.doc.status_code import StatusCodeEnum
 
 
@@ -12,10 +13,26 @@ class BaseResponse[Data: BaseModel](BaseModel):
     data: Data | None = None
 
 
+INTERNAL_RESPONSE: dict[int | str, dict[str, Any]] = {
+    StatusCodeEnum.INTERNAL_SERVER_ERROR: {
+        "model": BaseResponse,
+        "description": BaseExceptionMessageEnum.INTERNAL_ERROR,
+    },
+}
+
+UNAUTHORIZED_RESPONSE: dict[int | str, dict[str, Any]] = {
+    StatusCodeEnum.UNAUTHORIZED: {
+        "model": BaseResponse,
+        "description": BaseExceptionMessageEnum.NOT_AUTHENTICATED,
+    },
+}
+
+
 def ok(data: BaseModel | None = None) -> JSONResponse:
     body: Any = BaseResponse(status_code=StatusCodeEnum.OK, data=data)
     return JSONResponse(
-        status_code=StatusCodeEnum.OK, content=body.model_dump(serialize_as_any=True)
+        status_code=StatusCodeEnum.OK,
+        content=body.model_dump(serialize_as_any=True, mode="json"),
     )
 
 

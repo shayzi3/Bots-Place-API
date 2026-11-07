@@ -23,6 +23,7 @@ from bots_place.domain.commands import (
     RequestLoginCodeCommand,
     ResendCodeCommand,
 )
+from bots_place.domain.queries import GetUserByIdQuery
 from bots_place.infrastructure.commands import (
     ConfirmLoginHandler,
     ConfirmRegistrationHandler,
@@ -32,6 +33,7 @@ from bots_place.infrastructure.commands import (
     ResendCodeHandler,
 )
 from bots_place.infrastructure.mediator import Mediator
+from bots_place.infrastructure.queries import GetUserByIdHandler
 from bots_place.infrastructure.repository.base import BaseUnitOfWork
 from bots_place.infrastructure.repository.sqlalchemy.core.session import (
     engine as default_engine,
@@ -167,6 +169,15 @@ class CommandHandlerProvider(Provider):
         return ResendCodeHandler(uow, email_sender, code_settings, jwt_settings)
 
 
+class QueryHandlerProvider(Provider):
+    @provide(scope=Scope.REQUEST)
+    def provide_get_user_by_id_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> GetUserByIdHandler:
+        return GetUserByIdHandler(uow)
+
+
 class MediatorProvider(Provider):
     @provide(scope=Scope.REQUEST)
     def provide_mediator(
@@ -177,6 +188,7 @@ class MediatorProvider(Provider):
         confirm_login: ConfirmLoginHandler,
         resend_code: ResendCodeHandler,
         google_login: GoogleLoginHandler,
+        get_user_by_id: GetUserByIdHandler,
     ) -> Mediator:
         mediator = Mediator()
         mediator.register(RegisterUserCommand, register_user)
@@ -185,6 +197,7 @@ class MediatorProvider(Provider):
         mediator.register(ConfirmLoginCommand, confirm_login)
         mediator.register(ResendCodeCommand, resend_code)
         mediator.register(GoogleLoginCommand, google_login)
+        mediator.register(GetUserByIdQuery, get_user_by_id)
         return mediator
 
 
@@ -198,6 +211,7 @@ def create_container() -> AsyncContainer:
         TokenProvider(),
         AuthProvider(),
         CommandHandlerProvider(),
+        QueryHandlerProvider(),
         MediatorProvider(),
     )
 

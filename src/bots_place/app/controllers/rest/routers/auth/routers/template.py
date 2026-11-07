@@ -7,10 +7,10 @@ from bots_place.app.controllers.rest.templates import templates
 from bots_place.app.core.api_path import AuthPathEnum
 from bots_place.app.core.doc.auth import AuthSummaryEnum
 
-template_router = APIRouter(route_class=TemplateExceptionRoute)
+auth_template_router = APIRouter(route_class=TemplateExceptionRoute)
 
 
-@template_router.get(
+@auth_template_router.get(
     AuthPathEnum.PAGE_LOGIN,
     response_class=HTMLResponse,
     summary=AuthSummaryEnum.PAGE_LOGIN,
@@ -29,7 +29,7 @@ async def login_page(request: Request) -> HTMLResponse:
     )
 
 
-@template_router.get(
+@auth_template_router.get(
     AuthPathEnum.PAGE_REGISTER,
     response_class=HTMLResponse,
     summary=AuthSummaryEnum.PAGE_REGISTER,
@@ -47,7 +47,7 @@ async def register_page(request: Request) -> HTMLResponse:
     )
 
 
-@template_router.get(
+@auth_template_router.get(
     AuthPathEnum.PAGE_CONFIRM,
     response_class=HTMLResponse,
     summary=AuthSummaryEnum.PAGE_CONFIRM,

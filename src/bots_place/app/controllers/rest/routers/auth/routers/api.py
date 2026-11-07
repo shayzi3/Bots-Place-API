@@ -51,7 +51,7 @@ from bots_place.domain.exceptions.user import (
 )
 from bots_place.infrastructure.mediator import Mediator
 
-api_router = APIRouter(route_class=ApiExceptionRoute)
+auth_api_router = APIRouter(route_class=ApiExceptionRoute)
 
 INTERNAL_RESPONSE: dict[int | str, dict[str, Any]] = {
     StatusCodeEnum.INTERNAL_SERVER_ERROR: {
@@ -68,7 +68,7 @@ VALIDATION_RESPONSE: dict[int | str, dict[str, Any]] = {
 }
 
 
-@api_router.post(
+@auth_api_router.post(
     AuthPathEnum.API_REGISTER,
     summary=AuthSummaryEnum.API_REGISTER,
     tags=["Auth API"],
@@ -109,7 +109,7 @@ async def register_user(
     return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
-@api_router.post(
+@auth_api_router.post(
     AuthPathEnum.API_LOGIN,
     summary=AuthSummaryEnum.API_LOGIN,
     tags=["Auth API"],
@@ -150,7 +150,7 @@ async def login_user(
     return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
-@api_router.post(
+@auth_api_router.post(
     AuthPathEnum.API_CONFIRM,
     summary=AuthSummaryEnum.API_CONFIRM,
     tags=["Auth API"],
@@ -211,7 +211,7 @@ async def confirm(
     return response
 
 
-@api_router.post(
+@auth_api_router.post(
     AuthPathEnum.API_RESEND,
     summary=AuthSummaryEnum.API_RESEND,
     tags=["Auth API"],
@@ -278,7 +278,7 @@ async def resend_code(
     return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
 
-@api_router.post(
+@auth_api_router.post(
     AuthPathEnum.API_LOGOUT,
     summary=AuthSummaryEnum.API_LOGOUT,
     tags=["Auth API"],
@@ -299,7 +299,7 @@ async def logout_user(
     return response
 
 
-@api_router.get(
+@auth_api_router.get(
     AuthPathEnum.GOOGLE_LOGIN,
     summary=AuthSummaryEnum.GOOGLE_LOGIN,
     tags=["Auth API"],
@@ -311,7 +311,7 @@ async def google_login(
     return await google.authorize_redirect(request)
 
 
-@api_router.get(
+@auth_api_router.get(
     AuthPathEnum.GOOGLE_CALLBACK,
     summary=AuthSummaryEnum.GOOGLE_CALLBACK,
     tags=["Auth API"],

@@ -1,10 +1,9 @@
-from typing import Protocol, TypeVar
+from typing import Protocol
 
-C_contra = TypeVar("C_contra", contravariant=True)
-R_co = TypeVar("R_co", covariant=True)
+from pydantic import BaseModel
 
 
-class CommandHandler(Protocol[C_contra, R_co]):
+class CommandHandler[C: BaseModel, R](Protocol):
     """Handler for a single command type, returning a result."""
 
-    async def handle(self, command: C_contra) -> R_co: ...
+    async def handle(self, command: C) -> R: ...

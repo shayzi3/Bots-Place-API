@@ -16,3 +16,12 @@ class AuthPathEnum(StrEnum):
     API_LOGOUT = f"{VERSION_PREFIX}{PREFIX}/logout"
     GOOGLE_LOGIN = f"{PREFIX}/google"
     GOOGLE_CALLBACK = f"{PREFIX}/google/callback"
+
+
+class RootPathEnum(StrEnum):
+    PAGE_ROOT = "/"
+
+
+class UserPathEnum(StrEnum):
+    PREFIX = "/user"
+    API_USER = f"{VERSION_PREFIX}{PREFIX}"
