@@ -29,10 +29,11 @@ class ResendCodeHandler:
         self._jwt_settings = jwt_settings
 
     async def handle(self, command: ResendCodeCommand) -> None:
-        user = await self._uow.users.get_by_email(command.email)
-        is_login = command.purpose is EmailCodePurposeEnum.LOGIN
-        if user is None or user.is_verified != is_login:
-            raise ResendNotAllowedError(command.email)
+        if command.purpose is not EmailCodePurposeEnum.CHANGE_EMAIL:
+            user = await self._uow.users.get_by_email(command.email)
+            is_login = command.purpose is EmailCodePurposeEnum.LOGIN
+            if user is None or user.is_verified != is_login:
+                raise ResendNotAllowedError(command.email)
 
         now = datetime.now(UTC)
         active = await self._uow.email_codes.get_active(

@@ -5,9 +5,11 @@ from typing import Self
 from ..repositories import (
     BaseBotRepository,
     BaseChatRepository,
+    BaseEmailChangeRequestRepository,
     BaseEmailCodeRepository,
     BaseUpdateRepository,
     BaseUserRepository,
+    BaseUserSessionRepository,
 )
 
 
@@ -16,6 +18,8 @@ class BaseUnitOfWork(ABC):
 
     users: BaseUserRepository
     email_codes: BaseEmailCodeRepository
+    email_change_requests: BaseEmailChangeRequestRepository
+    sessions: BaseUserSessionRepository
     bots: BaseBotRepository
     chats: BaseChatRepository
     updates: BaseUpdateRepository

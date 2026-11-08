@@ -6,7 +6,7 @@
 <h1>Создать аккаунт</h1>
 <p class="subtitle">Зарегистрируйтесь в Bots Place</p>
 
-<form method="post" action="{{ register_url }}" data-api data-success-url="/auth/confirm">
+<form method="post" action="{{ register_url }}" data-api data-success-url="{{ confirm_url }}">
     <label for="username">Имя</label>
     <input id="username" name="username" type="text" placeholder="Как к вам обращаться" autocomplete="name" required>
 

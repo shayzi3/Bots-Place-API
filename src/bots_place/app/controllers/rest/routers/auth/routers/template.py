@@ -22,6 +22,7 @@ async def login_page(request: Request) -> HTMLResponse:
         "login.html",
         {
             "login_url": AuthPathEnum.API_LOGIN,
+            "confirm_url": AuthPathEnum.PAGE_CONFIRM,
             "google_url": AuthPathEnum.GOOGLE_LOGIN,
             "register_url": AuthPathEnum.PAGE_REGISTER,
             "error": request.query_params.get("error"),
@@ -41,6 +42,7 @@ async def register_page(request: Request) -> HTMLResponse:
         "register.html",
         {
             "register_url": AuthPathEnum.API_REGISTER,
+            "confirm_url": AuthPathEnum.PAGE_CONFIRM,
             "google_url": AuthPathEnum.GOOGLE_LOGIN,
             "login_url": AuthPathEnum.PAGE_LOGIN,
         },

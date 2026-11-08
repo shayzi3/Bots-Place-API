@@ -13,23 +13,33 @@ class BaseResponse[Data: BaseModel](BaseModel):
     data: Data | None = None
 
 
-INTERNAL_RESPONSE: dict[int | str, dict[str, Any]] = {
-    StatusCodeEnum.INTERNAL_SERVER_ERROR: {
-        "model": BaseResponse,
-        "description": BaseExceptionMessageEnum.INTERNAL_ERROR,
-    },
-}
+def error_responses(
+    *,
+    internal: bool = False,
+    unauthorized: bool = False,
+    validation: bool = False,
+) -> dict[int | str, dict[str, Any]]:
+    responses: dict[int | str, dict[str, Any]] = {}
+    if internal:
+        responses[StatusCodeEnum.INTERNAL_SERVER_ERROR] = {
+            "model": BaseResponse,
+            "description": BaseExceptionMessageEnum.INTERNAL_ERROR,
+        }
+    if unauthorized:
+        responses[StatusCodeEnum.UNAUTHORIZED] = {
+            "model": BaseResponse,
+            "description": BaseExceptionMessageEnum.NOT_AUTHENTICATED,
+        }
+    if validation:
+        responses[StatusCodeEnum.UNPROCESSABLE_ENTITY] = {
+            "model": BaseResponse,
+            "description": BaseExceptionMessageEnum.VALIDATION_ERROR,
+        }
+    return responses
 
-UNAUTHORIZED_RESPONSE: dict[int | str, dict[str, Any]] = {
-    StatusCodeEnum.UNAUTHORIZED: {
-        "model": BaseResponse,
-        "description": BaseExceptionMessageEnum.NOT_AUTHENTICATED,
-    },
-}
 
-
-def ok(data: BaseModel | None = None) -> JSONResponse:
-    body: Any = BaseResponse(status_code=StatusCodeEnum.OK, data=data)
+def ok(data: BaseModel | None = None, msg: str | None = None) -> JSONResponse:
+    body: Any = BaseResponse(status_code=StatusCodeEnum.OK, msg=msg, data=data)
     return JSONResponse(
         status_code=StatusCodeEnum.OK,
         content=body.model_dump(serialize_as_any=True, mode="json"),

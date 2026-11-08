@@ -25,3 +25,6 @@ class RootPathEnum(StrEnum):
 class UserPathEnum(StrEnum):
     PREFIX = "/user"
     API_USER = f"{VERSION_PREFIX}{PREFIX}"
+    API_CHANGE_USERNAME = f"{VERSION_PREFIX}{PREFIX}"
+    API_CHANGE_USER_EMAIL_LINK = f"{VERSION_PREFIX}{PREFIX}/email/link"
+    API_CHANGE_USER_EMAIL = f"{VERSION_PREFIX}{PREFIX}/email"

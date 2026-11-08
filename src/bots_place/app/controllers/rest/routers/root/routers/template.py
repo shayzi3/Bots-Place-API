@@ -22,5 +22,7 @@ async def root_page(request: Request, user: CurrentUser) -> HTMLResponse:
             "is_authenticated": user is not None,
             "login_url": AuthPathEnum.PAGE_LOGIN,
             "profile_url": UserPathEnum.API_USER,
+            "logout_url": AuthPathEnum.API_LOGOUT,
+            "change_email_url": UserPathEnum.API_CHANGE_USER_EMAIL_LINK,
         },
     )

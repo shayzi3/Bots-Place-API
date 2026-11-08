@@ -25,6 +25,18 @@ class InvalidEmailCodeError(UserError):
     """Raised when the email confirmation code is missing, wrong or expired."""
 
 
+class UserNotFoundError(UserError):
+    """Raised when a user with the given id does not exist."""
+
+    def __init__(self, user_id: int) -> None:
+        super().__init__(f"User with id {user_id} not found")
+        self.user_id = user_id
+
+
+class EmailChangeLinkInvalidError(UserError):
+    """Raised when an email change link is unknown, expired or already used."""
+
+
 class InvalidTokenError(UserError):
     """Raised when a JWT token is missing, malformed or expired."""
 

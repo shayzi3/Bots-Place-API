@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import Request, Response
 
@@ -48,13 +49,15 @@ def set_request_session_confirmation(
     email: str,
     purpose: ConfirmationPurpose,
     ttl_seconds: int,
+    payload: dict[str, Any] | None = None,
 ) -> None:
-    payload = ConfirmationTokenPayload(
+    confirmation = ConfirmationTokenPayload(
         email=email,
         purpose=purpose,
         expires_at=datetime.now(UTC) + timedelta(seconds=ttl_seconds),
+        payload=payload,
     )
-    request.session[CONFIRMATION_SESSION] = payload.model_dump(mode="json")
+    request.session[CONFIRMATION_SESSION] = confirmation.model_dump(mode="json")
 
 
 def clear_request_session(request: Request) -> None:

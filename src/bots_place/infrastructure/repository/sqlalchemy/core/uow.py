@@ -7,9 +7,11 @@ from bots_place.infrastructure.repository.base.core.uow import BaseUnitOfWork
 from bots_place.infrastructure.repository.sqlalchemy.repositories import (
     BotRepository,
     ChatRepository,
+    EmailChangeRequestRepository,
     EmailCodeRepository,
     UpdateRepository,
     UserRepository,
+    UserSessionRepository,
 )
 
 
@@ -24,6 +26,8 @@ class UnitOfWork(BaseUnitOfWork):
 
     users: UserRepository
     email_codes: EmailCodeRepository
+    email_change_requests: EmailChangeRequestRepository
+    sessions: UserSessionRepository
     bots: BotRepository
     chats: ChatRepository
     updates: UpdateRepository
@@ -38,6 +42,8 @@ class UnitOfWork(BaseUnitOfWork):
 
         self.users = UserRepository(session)
         self.email_codes = EmailCodeRepository(session)
+        self.email_change_requests = EmailChangeRequestRepository(session)
+        self.sessions = UserSessionRepository(session)
         self.bots = BotRepository(session)
         self.chats = ChatRepository(session)
         self.updates = UpdateRepository(session)

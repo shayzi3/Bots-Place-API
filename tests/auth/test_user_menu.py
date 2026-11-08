@@ -11,37 +11,24 @@ from fastapi import FastAPI
 from bots_place.app.controllers.rest.routers import include_routers
 from bots_place.app.controllers.rest.routers.auth.utils.cookies import ACCESS_COOKIE
 from bots_place.app.core.api_path import UserPathEnum
-from bots_place.app.security.tokens import TokenService
-from bots_place.config.env import JwtSettings
 from bots_place.domain.entities.user import UserBaseModel
-from bots_place.domain.queries import GetUserByIdQuery
+from bots_place.domain.queries import GetUserBySessionQuery
 from bots_place.infrastructure.mediator import Mediator
-from bots_place.infrastructure.queries import GetUserByIdHandler
-
-
-@pytest.fixture
-def tokens(jwt_settings: JwtSettings) -> TokenService:
-    return TokenService(jwt_settings)
+from bots_place.infrastructure.queries import GetUserBySessionHandler
 
 
 @pytest.fixture
 def mediator(uow: MagicMock) -> Mediator:
     mediator = Mediator()
-    mediator.register(GetUserByIdQuery, GetUserByIdHandler(uow))
+    mediator.register(GetUserBySessionQuery, GetUserBySessionHandler(uow))
     return mediator
 
 
 @pytest.fixture
-async def container(
-    mediator: Mediator, tokens: TokenService
-) -> AsyncGenerator[AsyncContainer]:
+async def container(mediator: Mediator) -> AsyncGenerator[AsyncContainer]:
     provider = Provider(scope=Scope.APP)
-    provider.from_context(provides=TokenService, scope=Scope.APP)
     provider.from_context(provides=Mediator, scope=Scope.APP)
-    container = make_async_container(
-        provider,
-        context={TokenService: tokens, Mediator: mediator},
-    )
+    container = make_async_container(provider, context={Mediator: mediator})
     yield container
     await container.close()
 
@@ -68,24 +55,27 @@ async def test_user_api_without_cookie_returns_unauthorized(
     uow.users.get.assert_not_called()
 
 
-async def test_user_api_with_invalid_token_returns_unauthorized(
+async def test_user_api_with_unknown_session_returns_unauthorized(
     client: httpx.AsyncClient,
+    uow: MagicMock,
 ) -> None:
+    uow.sessions.get.return_value = None
+
     response = await client.get(
         UserPathEnum.API_USER,
-        headers={"Cookie": f"{ACCESS_COOKIE}=not-a-jwt"},
+        headers={"Cookie": f"{ACCESS_COOKIE}=unknown"},
     )
 
     assert response.status_code == 401
 
 
-async def test_user_api_with_token_of_missing_user_returns_unauthorized(
+async def test_user_api_with_session_of_missing_user_returns_unauthorized(
     client: httpx.AsyncClient,
     uow: MagicMock,
-    tokens: TokenService,
+    make_session: Callable[[int], str],
 ) -> None:
     uow.users.get.return_value = None
-    token = tokens.create_access(user_id=7, email="user@example.com")
+    token = make_session(7)
 
     response = await client.get(
         UserPathEnum.API_USER,
@@ -98,12 +88,12 @@ async def test_user_api_with_token_of_missing_user_returns_unauthorized(
 async def test_user_api_returns_profile_data(
     client: httpx.AsyncClient,
     uow: MagicMock,
-    tokens: TokenService,
+    make_session: Callable[[int], str],
     make_user: Callable[..., UserBaseModel],
 ) -> None:
     user = make_user(id=7, email="menu@example.com")
     uow.users.get.return_value = user
-    token = tokens.create_access(user_id=7, email="menu@example.com")
+    token = make_session(7)
 
     response = await client.get(
         UserPathEnum.API_USER,

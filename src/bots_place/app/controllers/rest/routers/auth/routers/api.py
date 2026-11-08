@@ -1,10 +1,15 @@
-from typing import Annotated, Any
+from typing import Annotated
 
 from dishka.integrations.fastapi import FromDishka
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from bots_place.app.controllers.rest.response import BaseResponse, error, ok
+from bots_place.app.controllers.rest.response import (
+    BaseResponse,
+    error,
+    error_responses,
+    ok,
+)
 from bots_place.app.controllers.rest.route import ApiExceptionRoute
 from bots_place.app.controllers.rest.routers.auth.depends import Confirmation
 from bots_place.app.controllers.rest.routers.auth.schema.confirm import (
@@ -24,7 +29,6 @@ from bots_place.app.core.api_path import AuthPathEnum
 from bots_place.app.core.doc.auth import AuthSummaryEnum
 from bots_place.app.core.doc.auth.exception_msg import AuthExceptionMessageEnum
 from bots_place.app.core.doc.auth.success_msg import AuthSuccessMessageEnum
-from bots_place.app.core.doc.base_exception_msg import BaseExceptionMessageEnum
 from bots_place.app.core.doc.status_code import StatusCodeEnum
 from bots_place.app.security.google_auth.base import GoogleAuth
 from bots_place.app.security.tokens import (
@@ -33,12 +37,15 @@ from bots_place.app.security.tokens import (
 )
 from bots_place.config.env import CodeSettings, CookieSettings
 from bots_place.domain.commands import (
+    ConfirmEmailChangeCommand,
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
+    CreateSessionCommand,
     GoogleLoginCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
     ResendCodeCommand,
+    RevokeSessionCommand,
 )
 from bots_place.domain.entities.email_code import EmailCodePurposeEnum
 from bots_place.domain.exceptions.google import GoogleAuthError
@@ -48,24 +55,11 @@ from bots_place.domain.exceptions.user import (
     LoginNotAllowedError,
     ResendCooldownError,
     ResendNotAllowedError,
+    UserNotFoundError,
 )
 from bots_place.infrastructure.mediator import Mediator
 
 auth_api_router = APIRouter(route_class=ApiExceptionRoute)
-
-INTERNAL_RESPONSE: dict[int | str, dict[str, Any]] = {
-    StatusCodeEnum.INTERNAL_SERVER_ERROR: {
-        "model": BaseResponse,
-        "description": BaseExceptionMessageEnum.INTERNAL_ERROR,
-    },
-}
-
-VALIDATION_RESPONSE: dict[int | str, dict[str, Any]] = {
-    StatusCodeEnum.UNPROCESSABLE_ENTITY: {
-        "model": BaseResponse,
-        "description": BaseExceptionMessageEnum.VALIDATION_ERROR,
-    },
-}
 
 
 @auth_api_router.post(
@@ -77,8 +71,7 @@ VALIDATION_RESPONSE: dict[int | str, dict[str, Any]] = {
             "model": BaseResponse[RetryAfterSchema],
             "description": AuthSuccessMessageEnum.REGISTER_CODE_SENT,
         },
-        **VALIDATION_RESPONSE,
-        **INTERNAL_RESPONSE,
+        **error_responses(validation=True, internal=True),
         StatusCodeEnum.CONFLICT: {
             "model": BaseResponse,
             "description": AuthExceptionMessageEnum.EMAIL_ALREADY_EXISTS,
@@ -118,8 +111,7 @@ async def register_user(
             "model": BaseResponse[RetryAfterSchema],
             "description": AuthSuccessMessageEnum.LOGIN_CODE_SENT,
         },
-        **VALIDATION_RESPONSE,
-        **INTERNAL_RESPONSE,
+        **error_responses(validation=True, internal=True),
         StatusCodeEnum.FORBIDDEN: {
             "model": BaseResponse,
             "description": AuthExceptionMessageEnum.LOGIN_NOT_ALLOWED,
@@ -159,8 +151,7 @@ async def login_user(
             "model": BaseResponse,
             "description": AuthSuccessMessageEnum.CODE_CONFIRMED,
         },
-        **VALIDATION_RESPONSE,
-        **INTERNAL_RESPONSE,
+        **error_responses(validation=True, internal=True),
         StatusCodeEnum.UNAUTHORIZED: {
             "model": BaseResponse,
             "description": AuthExceptionMessageEnum.INVALID_PENDING_TOKEN,
@@ -168,6 +159,10 @@ async def login_user(
         StatusCodeEnum.BAD_REQUEST: {
             "model": BaseResponse,
             "description": AuthExceptionMessageEnum.INVALID_EMAIL_CODE,
+        },
+        StatusCodeEnum.CONFLICT: {
+            "model": BaseResponse,
+            "description": AuthExceptionMessageEnum.EMAIL_ALREADY_EXISTS,
         },
     },
 )
@@ -185,11 +180,25 @@ async def confirm(
             AuthExceptionMessageEnum.INVALID_PENDING_TOKEN,
         )
 
-    command: ConfirmRegistrationCommand | ConfirmLoginCommand
+    command: (
+        ConfirmRegistrationCommand | ConfirmLoginCommand | ConfirmEmailChangeCommand
+    )
     if confirmation.purpose is ConfirmationPurpose.REGISTER:
         command = ConfirmRegistrationCommand(email=confirmation.email, code=form.code)
     elif confirmation.purpose is ConfirmationPurpose.LOGIN:
         command = ConfirmLoginCommand(email=confirmation.email, code=form.code)
+    elif confirmation.purpose is ConfirmationPurpose.CHANGE_EMAIL:
+        user_id = (confirmation.payload or {}).get("user_id")
+        if not isinstance(user_id, int):
+            return error(
+                StatusCodeEnum.UNAUTHORIZED,
+                AuthExceptionMessageEnum.INVALID_PENDING_TOKEN,
+            )
+        command = ConfirmEmailChangeCommand(
+            user_id=user_id,
+            email=confirmation.email,
+            code=form.code,
+        )
     else:
         return error(
             StatusCodeEnum.UNAUTHORIZED,
@@ -203,11 +212,26 @@ async def confirm(
             StatusCodeEnum.BAD_REQUEST,
             AuthExceptionMessageEnum.INVALID_EMAIL_CODE,
         )
+    except EmailAlreadyExistsError:
+        return error(
+            StatusCodeEnum.CONFLICT,
+            AuthExceptionMessageEnum.EMAIL_ALREADY_EXISTS,
+        )
+    except UserNotFoundError:
+        return error(
+            StatusCodeEnum.UNAUTHORIZED,
+            AuthExceptionMessageEnum.INVALID_PENDING_TOKEN,
+        )
 
-    access = tokens.create_access(user.id, user.email)
-    response = ok()
     clear_request_session(request)
-    set_auth_cookie(response, ACCESS_COOKIE, access, tokens.access_ttl_seconds, cookies)
+    if confirmation.purpose is ConfirmationPurpose.CHANGE_EMAIL:
+        response = ok()
+        clear_auth_cookie(response, ACCESS_COOKIE, cookies)
+        return response
+
+    token = await mediator.send(CreateSessionCommand(user_id=user.id))
+    response = ok()
+    set_auth_cookie(response, ACCESS_COOKIE, token, tokens.access_ttl_seconds, cookies)
     return response
 
 
@@ -220,7 +244,7 @@ async def confirm(
             "model": BaseResponse[RetryAfterSchema],
             "description": AuthSuccessMessageEnum.CODE_RESENT,
         },
-        **INTERNAL_RESPONSE,
+        **error_responses(internal=True),
         StatusCodeEnum.UNAUTHORIZED: {
             "model": BaseResponse,
             "description": AuthExceptionMessageEnum.INVALID_PENDING_TOKEN,
@@ -250,6 +274,8 @@ async def resend_code(
 
     if confirmation.purpose is ConfirmationPurpose.REGISTER:
         purpose = EmailCodePurposeEnum.REGISTRATION
+    elif confirmation.purpose is ConfirmationPurpose.CHANGE_EMAIL:
+        purpose = EmailCodePurposeEnum.CHANGE_EMAIL
     else:
         purpose = EmailCodePurposeEnum.LOGIN
 
@@ -274,6 +300,7 @@ async def resend_code(
         email=confirmation.email,
         purpose=confirmation.purpose,
         ttl_seconds=tokens.confirmation_ttl_seconds,
+        payload=confirmation.payload,
     )
     return ok(RetryAfterSchema(retry_after=code_settings.resend_cooldown_seconds))
 
@@ -287,12 +314,17 @@ async def resend_code(
             "model": BaseResponse,
             "description": AuthSuccessMessageEnum.LOGOUT,
         },
-        **INTERNAL_RESPONSE,
+        **error_responses(internal=True),
     },
 )
 async def logout_user(
-    cookies: FromDishka[CookieSettings], request: Request
+    cookies: FromDishka[CookieSettings],
+    mediator: FromDishka[Mediator],
+    request: Request,
 ) -> JSONResponse:
+    token = request.cookies.get(ACCESS_COOKIE)
+    if token is not None:
+        await mediator.send(RevokeSessionCommand(token=token))
     response = ok()
     clear_auth_cookie(response, ACCESS_COOKIE, cookies)
     clear_request_session(request)
@@ -334,7 +366,7 @@ async def google_callback(
             status_code=StatusCodeEnum.SEE_OTHER,
         )
 
-    access = tokens.create_access(user.id, user.email)
+    token = await mediator.send(CreateSessionCommand(user_id=user.id))
     response = RedirectResponse("/", status_code=StatusCodeEnum.SEE_OTHER)
-    set_auth_cookie(response, ACCESS_COOKIE, access, tokens.access_ttl_seconds, cookies)
+    set_auth_cookie(response, ACCESS_COOKIE, token, tokens.access_ttl_seconds, cookies)
     return response

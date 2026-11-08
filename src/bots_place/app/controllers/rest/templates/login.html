@@ -10,7 +10,7 @@
 <p class="subtitle" style="color: #dc2626;">Не удалось войти через Google. Попробуйте ещё раз.</p>
 {% endif %}
 
-<form method="post" action="{{ login_url }}" data-api data-success-url="/auth/confirm">
+<form method="post" action="{{ login_url }}" data-api data-success-url="{{ confirm_url }}">
     <label for="email">Email</label>
     <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
     <p class="subtitle" style="color: #dc2626;" data-message hidden></p>

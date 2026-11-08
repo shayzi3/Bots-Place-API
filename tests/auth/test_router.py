@@ -24,6 +24,7 @@ from bots_place.config.env import CodeSettings, CookieSettings, JwtSettings
 from bots_place.domain.commands import (
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
+    CreateSessionCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
     ResendCodeCommand,
@@ -45,10 +46,13 @@ SESSION_COOKIE = "session"
 class FakeMediator:
     def __init__(self) -> None:
         self.commands: list[Any] = []
+        self.session_token = "session-token"
         self.result: Any = None
         self.error: Exception | None = None
 
     async def send(self, command: Any) -> Any:
+        if isinstance(command, CreateSessionCommand):
+            return self.session_token
         self.commands.append(command)
         if self.error is not None:
             raise self.error
@@ -280,7 +284,6 @@ async def test_confirm_post_without_session_returns_unauthorized(
 async def test_confirm_registration_sets_access_cookie_and_clears_session(
     client: httpx.AsyncClient,
     mediator: FakeMediator,
-    tokens: TokenService,
     make_user: Callable[..., Any],
     set_cookies: Callable[[httpx.Response], list[str]],
 ) -> None:
@@ -298,9 +301,7 @@ async def test_confirm_registration_sets_access_cookie_and_clears_session(
     ]
 
     headers = set_cookies(response)
-    payload = tokens.decode_access(_cookie_value(headers, ACCESS_COOKIE))
-    assert payload.user_id == 7
-    assert payload.email == "user@example.com"
+    assert _cookie_value(headers, ACCESS_COOKIE) == mediator.session_token
 
     session = _cookie_header(headers, SESSION_COOKIE)
     assert session is not None

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class UserProfileSchema(BaseModel):
@@ -8,3 +8,11 @@ class UserProfileSchema(BaseModel):
     username: str
     email: str
     created_at: datetime
+
+
+class ChangeUsernameSchema(BaseModel):
+    username: str
+
+
+class ChangeUserEmailSchema(BaseModel):
+    email: EmailStr

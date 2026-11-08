@@ -166,6 +166,85 @@
             color: #9ca3af;
         }
 
+        .modal {
+            width: min(380px, calc(100vw - 32px));
+            padding: 24px;
+            border: none;
+            border-radius: 16px;
+            color: #111827;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .modal::backdrop {
+            background: rgba(17, 24, 39, 0.45);
+        }
+
+        .modal__title {
+            margin: 0 0 16px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .modal__label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .modal__input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd6fe;
+            border-radius: 12px;
+            font-size: 15px;
+            outline: none;
+        }
+
+        .modal__input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .modal__error {
+            margin: 10px 0 0;
+            font-size: 13px;
+            color: #dc2626;
+        }
+
+        .modal__error[hidden] {
+            display: none;
+        }
+
+        .modal__info {
+            margin: 10px 0 0;
+            font-size: 13px;
+            color: #047857;
+        }
+
+        .modal__info[hidden] {
+            display: none;
+        }
+
+        .modal__actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 20px;
+        }
+
+        .modal__cancel {
+            color: #374151;
+            background: #f3f4f6;
+            box-shadow: none;
+        }
+
+        .modal__submit:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
     </style>
 </head>
 <body>
@@ -180,11 +259,45 @@
         {% endif %}
     </header>
     {% if is_authenticated %}
+    <dialog class="modal" id="username-dialog">
+        <form id="username-form">
+            <h2 class="modal__title">Изменить имя</h2>
+            <label class="modal__label" for="username-input">Новое имя</label>
+            <input class="modal__input" id="username-input" name="username" type="text" maxlength="100" autocomplete="name" required>
+            <p class="modal__error" id="username-error" hidden></p>
+            <div class="modal__actions">
+                <button type="button" class="btn modal__cancel" id="username-cancel">Отмена</button>
+                <button type="submit" class="btn modal__submit" id="username-submit">Сохранить</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog class="modal" id="email-warning-dialog">
+        <h2 class="modal__title">Вы точно хотите изменить почту?</h2>
+        <div class="modal__actions">
+            <button type="button" class="btn modal__cancel" id="email-warning-no">Нет</button>
+            <button type="button" class="btn modal__submit" id="email-warning-yes">Да</button>
+        </div>
+    </dialog>
+    <dialog class="modal" id="email-dialog">
+        <form id="email-form">
+            <h2 class="modal__title">Новая почта</h2>
+            <label class="modal__label" for="email-input">Email</label>
+            <input class="modal__input" id="email-input" name="email" type="email" maxlength="255" autocomplete="email" required>
+            <p class="modal__error" id="email-error" hidden></p>
+            <p class="modal__info" id="email-info" hidden></p>
+            <div class="modal__actions">
+                <button type="button" class="btn modal__cancel" id="email-cancel">Отмена</button>
+                <button type="submit" class="btn modal__submit" id="email-submit">Отправить</button>
+            </div>
+        </form>
+    </dialog>
     <script>
         (function () {
             var button = document.getElementById("profile-button");
             var menu = document.getElementById("profile-menu");
             var loaded = false;
+            var nameNode = null;
+            var avatarNode = null;
 
             function createElement(tag, className, text) {
                 var node = document.createElement(tag);
@@ -223,12 +336,13 @@
                 var wrap = createElement("div", "user-menu");
 
                 var header = createElement("div", "user-menu__header");
-                header.appendChild(
-                    createElement("div", "user-menu__avatar", user.username.charAt(0).toUpperCase())
-                );
+                avatarNode = createElement("div", "user-menu__avatar");
+                header.appendChild(avatarNode);
                 var titles = createElement("div", "user-menu__titles");
-                titles.appendChild(createElement("p", "user-menu__name", user.username));
+                nameNode = createElement("p", "user-menu__name");
+                titles.appendChild(nameNode);
                 titles.appendChild(createElement("p", "user-menu__email", user.email));
+                setUsername(user.username);
                 header.appendChild(titles);
                 wrap.appendChild(header);
 
@@ -237,9 +351,162 @@
                 fields.appendChild(field("Регистрация", formatDate(user.created_at)));
                 wrap.appendChild(fields);
 
-                wrap.appendChild(actionButton("Изменить имя"));
-                wrap.appendChild(actionButton("Изменить почту"));
+                var changeName = actionButton("Изменить имя");
+                changeName.addEventListener("click", openUsernameDialog);
+                wrap.appendChild(changeName);
+                var changeEmail = actionButton("Изменить почту");
+                changeEmail.addEventListener("click", openEmailWarning);
+                wrap.appendChild(changeEmail);
+                var logoutButton = actionButton("Выйти из профиля");
+                logoutButton.addEventListener("click", logout);
+                wrap.appendChild(logoutButton);
                 return wrap;
+            }
+
+            function setUsername(username) {
+                nameNode.textContent = username;
+                avatarNode.textContent = username.charAt(0).toUpperCase();
+            }
+
+            var dialog = document.getElementById("username-dialog");
+            var form = document.getElementById("username-form");
+            var input = document.getElementById("username-input");
+            var errorText = document.getElementById("username-error");
+            var submit = document.getElementById("username-submit");
+            var cancel = document.getElementById("username-cancel");
+
+            function showError(message) {
+                errorText.textContent = message;
+                errorText.hidden = false;
+            }
+
+            function openUsernameDialog() {
+                input.value = nameNode.textContent;
+                errorText.hidden = true;
+                errorText.textContent = "";
+                dialog.showModal();
+                input.select();
+            }
+
+            cancel.addEventListener("click", function () {
+                dialog.close();
+            });
+
+            form.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                var username = input.value.trim();
+                if (!username) {
+                    showError("Введите имя.");
+                    return;
+                }
+                submit.disabled = true;
+                try {
+                    var response = await fetch("{{ profile_url }}", {
+                        method: "PATCH",
+                        credentials: "same-origin",
+                        headers: { Accept: "application/json" },
+                        body: new URLSearchParams({ username: username }),
+                    });
+                    if (response.status === 401) {
+                        window.location.href = "{{ login_url }}";
+                        return;
+                    }
+                    if (response.status === 422) {
+                        showError("Имя должно быть от 1 до 100 символов.");
+                        return;
+                    }
+                    if (!response.ok) {
+                        showError("Не удалось сохранить имя. Попробуйте ещё раз.");
+                        return;
+                    }
+                    var body = await response.json();
+                    setUsername(body.data.username);
+                    dialog.close();
+                } catch (err) {
+                    showError("Нет связи с сервером. Попробуйте ещё раз.");
+                } finally {
+                    submit.disabled = false;
+                }
+            });
+
+            var emailWarningDialog = document.getElementById("email-warning-dialog");
+            var emailDialog = document.getElementById("email-dialog");
+            var emailForm = document.getElementById("email-form");
+            var emailInput = document.getElementById("email-input");
+            var emailError = document.getElementById("email-error");
+            var emailInfo = document.getElementById("email-info");
+            var emailSubmit = document.getElementById("email-submit");
+
+            function showEmailError(message) {
+                emailError.textContent = message;
+                emailError.hidden = false;
+            }
+
+            function openEmailWarning() {
+                emailWarningDialog.showModal();
+            }
+
+            document.getElementById("email-warning-no").addEventListener("click", function () {
+                emailWarningDialog.close();
+            });
+
+            document.getElementById("email-warning-yes").addEventListener("click", function () {
+                emailWarningDialog.close();
+                emailInput.value = "";
+                emailError.hidden = true;
+                emailInfo.hidden = true;
+                emailSubmit.hidden = false;
+                emailDialog.showModal();
+                emailInput.focus();
+            });
+
+            document.getElementById("email-cancel").addEventListener("click", function () {
+                emailDialog.close();
+            });
+
+            emailForm.addEventListener("submit", async function (event) {
+                event.preventDefault();
+                var email = emailInput.value.trim();
+                if (!email) {
+                    showEmailError("Введите email.");
+                    return;
+                }
+                emailSubmit.disabled = true;
+                try {
+                    var response = await fetch("{{ change_email_url }}", {
+                        method: "POST",
+                        credentials: "same-origin",
+                        headers: { Accept: "application/json" },
+                        body: new URLSearchParams({ email: email }),
+                    });
+                    if (response.status === 401) {
+                        window.location.href = "{{ login_url }}";
+                        return;
+                    }
+                    var body = await response.json();
+                    if (!response.ok) {
+                        showEmailError(body.msg || "Не удалось отправить ссылку. Попробуйте ещё раз.");
+                        return;
+                    }
+                    emailError.hidden = true;
+                    emailInfo.textContent = body.msg;
+                    emailInfo.hidden = false;
+                    emailSubmit.hidden = true;
+                } catch (err) {
+                    showEmailError("Нет связи с сервером. Попробуйте ещё раз.");
+                } finally {
+                    emailSubmit.disabled = false;
+                }
+            });
+
+            function logout() {
+                fetch("{{ logout_url }}", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { Accept: "application/json" },
+                }).finally(function () {
+                    window.location.reload();
+                });
             }
 
             button.addEventListener("click", async function () {

@@ -16,24 +16,39 @@ from bots_place.config.env import (
 )
 from bots_place.config.env import settings as app_settings
 from bots_place.domain.commands import (
+    ChangeUserEmailCommand,
+    ChangeUsernameCommand,
+    ConfirmEmailChangeCommand,
     ConfirmLoginCommand,
     ConfirmRegistrationCommand,
+    CreateSessionCommand,
     GoogleLoginCommand,
     RegisterUserCommand,
     RequestLoginCodeCommand,
     ResendCodeCommand,
+    RevokeSessionCommand,
+    UseEmailChangeLinkCommand,
 )
-from bots_place.domain.queries import GetUserByIdQuery
+from bots_place.domain.queries import GetUserByIdQuery, GetUserBySessionQuery
 from bots_place.infrastructure.commands import (
+    ChangeUsernameHandler,
+    ConfirmEmailChangeHandler,
     ConfirmLoginHandler,
     ConfirmRegistrationHandler,
+    CreateSessionHandler,
     GoogleLoginHandler,
     RegisterUserHandler,
+    RequestEmailChangeHandler,
     RequestLoginCodeHandler,
     ResendCodeHandler,
+    RevokeSessionHandler,
+    UseEmailChangeLinkHandler,
 )
 from bots_place.infrastructure.mediator import Mediator
-from bots_place.infrastructure.queries import GetUserByIdHandler
+from bots_place.infrastructure.queries import (
+    GetUserByIdHandler,
+    GetUserBySessionHandler,
+)
 from bots_place.infrastructure.repository.base import BaseUnitOfWork
 from bots_place.infrastructure.repository.sqlalchemy.core.session import (
     engine as default_engine,
@@ -168,6 +183,54 @@ class CommandHandlerProvider(Provider):
     ) -> ResendCodeHandler:
         return ResendCodeHandler(uow, email_sender, code_settings, jwt_settings)
 
+    @provide(scope=Scope.REQUEST)
+    def provide_change_username_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> ChangeUsernameHandler:
+        return ChangeUsernameHandler(uow)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_request_email_change_handler(
+        self,
+        uow: BaseUnitOfWork,
+        email_sender: EmailSender,
+        jwt_settings: JwtSettings,
+    ) -> RequestEmailChangeHandler:
+        return RequestEmailChangeHandler(uow, email_sender, jwt_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_use_email_change_link_handler(
+        self,
+        uow: BaseUnitOfWork,
+        email_sender: EmailSender,
+        jwt_settings: JwtSettings,
+    ) -> UseEmailChangeLinkHandler:
+        return UseEmailChangeLinkHandler(uow, email_sender, jwt_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_confirm_email_change_handler(
+        self,
+        uow: BaseUnitOfWork,
+        code_settings: CodeSettings,
+    ) -> ConfirmEmailChangeHandler:
+        return ConfirmEmailChangeHandler(uow, code_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_create_session_handler(
+        self,
+        uow: BaseUnitOfWork,
+        jwt_settings: JwtSettings,
+    ) -> CreateSessionHandler:
+        return CreateSessionHandler(uow, jwt_settings)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_revoke_session_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> RevokeSessionHandler:
+        return RevokeSessionHandler(uow)
+
 
 class QueryHandlerProvider(Provider):
     @provide(scope=Scope.REQUEST)
@@ -176,6 +239,13 @@ class QueryHandlerProvider(Provider):
         uow: BaseUnitOfWork,
     ) -> GetUserByIdHandler:
         return GetUserByIdHandler(uow)
+
+    @provide(scope=Scope.REQUEST)
+    def provide_get_user_by_session_handler(
+        self,
+        uow: BaseUnitOfWork,
+    ) -> GetUserBySessionHandler:
+        return GetUserBySessionHandler(uow)
 
 
 class MediatorProvider(Provider):
@@ -188,6 +258,13 @@ class MediatorProvider(Provider):
         confirm_login: ConfirmLoginHandler,
         resend_code: ResendCodeHandler,
         google_login: GoogleLoginHandler,
+        change_username: ChangeUsernameHandler,
+        request_email_change: RequestEmailChangeHandler,
+        use_email_change_link: UseEmailChangeLinkHandler,
+        confirm_email_change: ConfirmEmailChangeHandler,
+        create_session: CreateSessionHandler,
+        revoke_session: RevokeSessionHandler,
+        get_user_by_session: GetUserBySessionHandler,
         get_user_by_id: GetUserByIdHandler,
     ) -> Mediator:
         mediator = Mediator()
@@ -197,6 +274,13 @@ class MediatorProvider(Provider):
         mediator.register(ConfirmLoginCommand, confirm_login)
         mediator.register(ResendCodeCommand, resend_code)
         mediator.register(GoogleLoginCommand, google_login)
+        mediator.register(ChangeUsernameCommand, change_username)
+        mediator.register(ChangeUserEmailCommand, request_email_change)
+        mediator.register(UseEmailChangeLinkCommand, use_email_change_link)
+        mediator.register(ConfirmEmailChangeCommand, confirm_email_change)
+        mediator.register(CreateSessionCommand, create_session)
+        mediator.register(RevokeSessionCommand, revoke_session)
+        mediator.register(GetUserBySessionQuery, get_user_by_session)
         mediator.register(GetUserByIdQuery, get_user_by_id)
         return mediator
 

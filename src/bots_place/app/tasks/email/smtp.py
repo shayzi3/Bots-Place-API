@@ -10,6 +10,20 @@ class SmtpEmailSender:
         self._settings = settings
 
     async def send_code(self, email: str, code: str) -> None:
+        await self._send(
+            email,
+            "Bots Place — код подтверждения",
+            f"Ваш код подтверждения: {code}",
+        )
+
+    async def send_link(self, email: str, link: str) -> None:
+        await self._send(
+            email,
+            "Bots Place — смена почты",
+            f"Перейдите по ссылке, чтобы подтвердить смену почты: {link}",
+        )
+
+    async def _send(self, email: str, subject: str, body: str) -> None:
         settings = self._settings
         if not settings.host:
             raise RuntimeError("SMTP_HOST is not configured")
@@ -17,8 +31,8 @@ class SmtpEmailSender:
         message = EmailMessage()
         message["From"] = settings.from_email
         message["To"] = email
-        message["Subject"] = "Bots Place — код подтверждения"
-        message.set_content(f"Ваш код подтверждения: {code}")
+        message["Subject"] = subject
+        message.set_content(body)
 
         await aiosmtplib.send(
             message,

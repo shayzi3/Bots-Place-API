@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class EmailCodePurposeEnum(StrEnum):
     REGISTRATION = "registration"
     LOGIN = "login"
+    CHANGE_EMAIL = "change_email"
 
 
 class EmailCodeBaseModel(BaseModel):

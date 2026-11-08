@@ -8,17 +8,20 @@ from .google import (
 from .mediator import HandlerNotFoundError, MediatorError
 from .user import (
     EmailAlreadyExistsError,
+    EmailChangeLinkInvalidError,
     InvalidEmailCodeError,
     InvalidTokenError,
     LoginNotAllowedError,
     ResendCooldownError,
     ResendNotAllowedError,
     UserError,
+    UserNotFoundError,
 )
 
 __all__ = [
     "AppError",
     "EmailAlreadyExistsError",
+    "EmailChangeLinkInvalidError",
     "ExpressionError",
     "GoogleAuthError",
     "GoogleAuthFailedError",
@@ -33,4 +36,5 @@ __all__ = [
     "UnknownFieldError",
     "UnknownOperatorError",
     "UserError",
+    "UserNotFoundError",
 ]
